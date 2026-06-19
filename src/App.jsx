@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 const BG="#07080F",SURF="#0D0E1C",BOR="#1C1D32",PRI="#6C63FF",ACC="#FF5C5C",TXT="#ECEAF8",MUT="#4A4A6E",DIM="#111222",SUB="#9896B8";
+const ANTHROPIC_KEY=import.meta.env.VITE_ANTHROPIC_KEY;
 const TC={film:"#FF5C5C",series:"#6C63FF",game:"#00D4AA",book:"#FF9B50",manga:"#FF6BA8",music:"#5CB8FF",podcast:"#A8FF5C"};
 
 function grade(s){
@@ -47,7 +48,7 @@ if(all||type==="podcast"){const d=await(await fetch(`https://itunes.apple.com/se
 }catch{}
 if(res.length>0)return res;
 // AI fallback
-const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,messages:[{role:"user",content:`Search "${q}" across ${type==="all"?"films,series,games,books,manga,music,podcasts":type+"s"}. Return ONLY a JSON array starting [ ending ]. Each: {"id":"x1","title":"title","type":"film|series|game|book|manga|music|podcast","year":"YYYY","credit":"creator","overview":"1-2 sentences","tags":["genre"],"cover":null}`}]})});
+const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,messages:[{role:"user",content:`Search "${q}" across ${type==="all"?"films,series,games,books,manga,music,podcasts":type+"s"}. Return ONLY a JSON array starting [ ending ]. Each: {"id":"x1","title":"title","type":"film|series|game|book|manga|music|podcast","year":"YYYY","credit":"creator","overview":"1-2 sentences","tags":["genre"],"cover":null}`}]})});
 const data=await r.json();
 const raw=data.content?.map(b=>b.text||"").join("")||"";
 const s=raw.indexOf("["),e=raw.lastIndexOf("]");
@@ -397,6 +398,98 @@ return(
 );
 }
 
+const PHILOSOPHY={
+"Perfect":"Nothing could be added, removed or changed without making it worse. Fewer than 1% of all media qualifies.",
+"Near-Perfect":"Almost flawless. One or two moments barely fall short — invisible against the whole.",
+"Excellent":"Exceptional work. Real imperfections exist but sit inside an outstanding vision.",
+"Really Good":"Clearly above average. You'd recommend it to almost anyone who likes the genre.",
+"Great":"More right than wrong. Has real weaknesses but the overall experience is positive.",
+"Good":"Does what it set out to do. Weaknesses are outweighed by what works.",
+"Decent":"Competent enough to finish but leaves little lasting impression.",
+"Mixed":"Genuine qualities make the failures worse. You can see what it could have been.",
+"Poor":"Fails in significant ways throughout. Fundamental failures of craft or design.",
+"Bad":"Fails on most key dimensions. Redeeming qualities are rare and insufficient.",
+"Terrible":"Doesn't just fail — actively harms. Damages franchises, careers, or genres.",
+"Worthless":"No value, no craft, no reason to exist. Warn others.",
+};
+const TIER_RANGES=[
+{label:"Perfect",min:10,max:10},{label:"Near-Perfect",min:9.5,max:9.9},{label:"Excellent",min:9.0,max:9.4},
+{label:"Really Good",min:8.5,max:8.9},{label:"Great",min:7.5,max:8.4},{label:"Good",min:6.5,max:7.4},
+{label:"Decent",min:5.5,max:6.4},{label:"Mixed",min:4.5,max:5.4},{label:"Poor",min:3.5,max:4.4},
+{label:"Bad",min:2.5,max:3.4},{label:"Terrible",min:1.5,max:2.4},{label:"Worthless",min:0,max:1.4},
+];
+const DESC_BY_TYPE={
+"Perfect":{film:"Every frame intentional. A new benchmark for cinema.",series:"No wasted episode, no unearned moment.",game:"Every system serves every other.",book:"Language and structure inseparable from meaning.",manga:"Panels don't just tell the story — they are the story.",music:"Not a note out of place.",podcast:"Every episode essential."},
+"Near-Perfect":{film:"Among the finest ever made in its genre.",series:"Exceptional almost every episode.",game:"Near-flawless, one system slightly undercooked.",book:"Brilliant with one passage that slightly breaks the spell.",manga:"A defining work with one arc that doesn't match the peaks.",music:"Extraordinary, one track that doesn't fully belong.",podcast:"As close to perfect as a podcast gets."},
+"Excellent":{film:"Outstanding filmmaking, earns full recommendation.",series:"Consistently strong with brilliance.",game:"Excellent design, one mechanic underdeveloped.",book:"Exceptional writing, memorable.",manga:"Brilliant art, mostly excellent storytelling.",music:"A great album with one or two weaker tracks.",podcast:"Consistently excellent."},
+"Really Good":{film:"A strong film with one notable weakness.",series:"Strong overall, one weak storyline.",game:"Very good design, one system underdelivers.",book:"Well-written with a sagging middle.",manga:"Very good art, one underperforming arc.",music:"Very good with some filler.",podcast:"Strong voice, some padded episodes."},
+"Great":{film:"Genuinely good. Memorable scenes, clear POV.",series:"More good than bad, compelling leads.",game:"Fun and well-made, core loop works.",book:"Engaging, some structural issues.",manga:"Consistent and enjoyable.",music:"More great songs than weak ones.",podcast:"Worth subscribing to."},
+"Good":{film:"Competent, delivers despite weak spots.",series:"Watchable, the good outweighs mediocre.",game:"Solid, core promise delivered.",book:"Worthwhile, characters have dimension.",manga:"Enjoyable, clear visual identity.",music:"Decent, about half the tracks land.",podcast:"Does the job adequately."},
+"Decent":{film:"Watchable, not memorable.",series:"Gets by on premise or cast.",game:"Adequately covers its genre.",book:"Readable, not rewarding.",manga:"Follows the formula comfortably.",music:"Background listening at best.",podcast:"Passable, topic carries it."},
+"Mixed":{film:"As frustrating as enjoyable.",series:"Uneven in ways that matter.",game:"Great ideas, poor execution.",book:"Interesting concept, inconsistent execution.",manga:"Real potential, unrealised.",music:"A few highlights, otherwise frustrating.",podcast:"Standout episodes, too many unprepared."},
+"Poor":{film:"Significant failures in writing or direction.",series:"Writing consistently fails the premise.",game:"Fundamentally flawed systems.",book:"Prose or structure works against the story.",manga:"Stilted art or incoherent storytelling.",music:"Poor production, weak songwriting.",podcast:"Poorly researched, badly structured."},
+"Bad":{film:"Fails on most levels.",series:"Collapses under its own weight.",game:"Broken design, even fans won't enjoy it.",book:"Bad prose, incoherent structure.",manga:"Art and story fail to engage.",music:"Actively bad, no coherent identity.",podcast:"No research, no structure, no insight."},
+"Terrible":{film:"A disgrace to the craft.",series:"Every episode makes things worse.",game:"Unplayable by any standard.",book:"Harmful to the reader's time.",manga:"A comprehensive embarrassment.",music:"Actively unlistenable.",podcast:"Dangerous or worthless."},
+"Worthless":{film:"No value whatsoever.",series:"Shouldn't exist.",game:"A scam.",book:"Worthless across every dimension.",manga:"Below amateur in art and story.",music:"Noise with intent to deceive.",podcast:"Actively harmful to the listener."},
+};
+
+function ScaleGuide({onClose}){
+const[sel,setSel]=useState(null);
+const active=sel!=null?TIER_RANGES[sel]:null;
+return(
+<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(7,8,15,0.93)",backdropFilter:"blur(16px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20,overflowY:"auto"}}>
+<div onClick={e=>e.stopPropagation()} style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:14,width:"100%",maxWidth:680,margin:"auto",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"88vh"}}>
+<div style={{padding:"18px 22px 12px",borderBottom:`1px solid ${BOR}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+<div><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:19,color:TXT}}>The Stkd Scale</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT,marginTop:2}}>Tap any tier for the full breakdown.</div></div>
+<button onClick={onClose} style={{background:DIM,border:`1px solid ${BOR}`,color:MUT,width:26,height:26,borderRadius:5,cursor:"pointer",fontSize:13}}>✕</button>
+</div>
+<div style={{display:"flex",flex:1,overflow:"hidden"}}>
+<div style={{width:160,borderRight:`1px solid ${BOR}`,overflowY:"auto",flexShrink:0}}>
+{TIER_RANGES.map((r,i)=>{const[,col]=grade(r.min);return(
+<button key={i} onClick={()=>setSel(i===sel?null:i)} style={{width:"100%",padding:"8px 12px",display:"flex",alignItems:"center",gap:8,background:sel===i?`${col}12`:"transparent",border:"none",borderBottom:`1px solid ${BOR}`,cursor:"pointer",textAlign:"left"}}>
+<div style={{width:6,height:6,borderRadius:"50%",background:col,flexShrink:0}}/>
+<div><div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:10,color:sel===i?col:TXT}}>{r.label}</div><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:13,color:col}}>{r.max===10?"10":`${r.min}–${r.max}`}</div></div>
+</button>
+);})}
+</div>
+<div style={{flex:1,overflowY:"auto",padding:18}}>
+{!active?TIER_RANGES.map((r,i)=>{const[,col]=grade(r.min);return(
+<div key={i} onClick={()=>setSel(i)} style={{padding:"8px 0",borderBottom:`1px solid ${BOR}`,cursor:"pointer",display:"flex",gap:12,alignItems:"flex-start"}}>
+<div style={{width:38,flexShrink:0,textAlign:"right"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:17,color:col}}>{r.max===10?"10":`${r.min}+`}</div></div>
+<div style={{width:3,background:col,borderRadius:2,alignSelf:"stretch",flexShrink:0}}/>
+<div><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:13,color:col}}>{r.label}</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:SUB}}>{PHILOSOPHY[r.label]?.slice(0,60)}…</div></div>
+</div>
+);}):(()=>{
+const[,col]=grade(active.min);
+return(
+<div>
+<button onClick={()=>setSel(null)} style={{background:"transparent",border:"none",color:MUT,cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,marginBottom:12,padding:0}}>← All tiers</button>
+<div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:12}}>
+<span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:42,color:col}}>{active.max===10?"10":`${active.min}–${active.max}`}</span>
+<span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:19,color:col}}>{active.label}</span>
+</div>
+<div style={{background:`${col}10`,border:`1px solid ${col}30`,borderLeft:`4px solid ${col}`,borderRadius:"0 8px 8px 0",padding:"11px 13px",marginBottom:12}}>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:9,color:col,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:5}}>Philosophy</div>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:"#D4D0F0",lineHeight:1.75}}>{PHILOSOPHY[active.label]}</div>
+</div>
+<div style={{display:"flex",flexDirection:"column",gap:6}}>
+{Object.entries(DESC_BY_TYPE[active.label]||{}).map(([type,text])=>(
+<div key={type} style={{display:"flex",gap:9,padding:"8px 11px",background:DIM,borderRadius:6,border:`1px solid ${BOR}`}}>
+<div style={{width:48,flexShrink:0}}><span style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:9,color:TC[type]||MUT,background:(TC[type]||MUT)+"14",padding:"2px 5px",borderRadius:3,textTransform:"uppercase"}}>{type}</span></div>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:"#B8B4D8",lineHeight:1.6}}>{text}</div>
+</div>
+))}
+</div>
+</div>
+);
+})()}
+</div>
+</div>
+</div>
+</div>
+);
+}
+
 function Agent({onClose}){
 const[msgs,setMsgs]=useState([{role:"assistant",text:"Hey! I'm the Stkd AI Agent. I can help you find any film, series, game, book, manga, album or podcast, or give recommendations. What are you looking for?"}]);
 const[input,setInput]=useState("");const[loading,setLoading]=useState(false);const bot=useRef(null);
@@ -405,7 +498,7 @@ const send=async()=>{
 if(!input.trim()||loading)return;const txt=input.trim();setInput("");setMsgs(m=>[...m,{role:"user",text:txt}]);setLoading(true);
 try{
 const hist=msgs.map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.text}));
-const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:700,system:"You are Stkd's AI media agent. Help users find specific media and give recommendations. Keep responses concise. Format recs as: Title (Type, Year) — reason.",messages:[...hist,{role:"user",content:txt}]})});
+const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:700,system:"You are Stkd's AI media agent. Help users find specific media and give recommendations. Keep responses concise. Format recs as: Title (Type, Year) — reason.",messages:[...hist,{role:"user",content:txt}]})});
 const d=await res.json();
 setMsgs(m=>[...m,{role:"assistant",text:d.content?.map(b=>b.text||"").join("")||"Sorry, try again!"}]);
 }catch{setMsgs(m=>[...m,{role:"assistant",text:"Connection error."}]);}
@@ -427,152 +520,3 @@ return(
 </div>
 </div>
 ))}
-{loading&&<div style={{display:"flex",gap:7}}><div style={{width:20,height:20,borderRadius:5,background:`linear-gradient(135deg,${PRI},${ACC})`}}/><div style={{background:DIM,border:`1px solid ${BOR}`,borderRadius:"2px 9px 9px 9px",padding:"8px 11px",display:"flex",gap:3}}>{[0,1,2].map(d=><div key={d} style={{width:4,height:4,borderRadius:"50%",background:PRI,opacity:.7,animation:`bn 1s ${d*.15}s infinite`}}/>)}<style>{`@keyframes bn{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}`}</style></div></div>}
-<div ref={bot}/>
-</div>
-<div style={{borderTop:`1px solid ${BOR}`,padding:"8px 10px",display:"flex",gap:7}}>
-<input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()} placeholder="Ask about any media…" style={{flex:1,background:BG,border:`1px solid ${BOR}`,borderRadius:7,padding:"7px 10px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:12,outline:"none"}} onFocus={e=>e.target.style.borderColor=PRI+"60"} onBlur={e=>e.target.style.borderColor=BOR}/>
-<button onClick={send} disabled={!input.trim()||loading} style={{background:input.trim()&&!loading?PRI:DIM,border:"none",borderRadius:7,padding:"0 12px",color:input.trim()&&!loading?"#fff":MUT,cursor:input.trim()&&!loading?"pointer":"not-allowed",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,flexShrink:0}}>↑</button>
-</div>
-</div>
-);
-}
-
-const FRIENDS_DATA=[
-{id:"u1",name:"Valeria M.",handle:"valeria_m",avatar:"VM",color:"#A78BFA",bio:"Cinema obsessive.",following:true,follower:true},
-{id:"u2",name:"Jordan K.",handle:"jkfilms",avatar:"JK",color:"#FF9B50",bio:"Games & film.",following:true,follower:true},
-{id:"u3",name:"Theo R.",handle:"theo_reads",avatar:"TR",color:"#00D4AA",bio:"Literary fiction.",following:false,follower:false},
-{id:"u4",name:"Priya S.",handle:"priyasounds",avatar:"PS",color:"#FF6BA8",bio:"Music nerd.",following:true,follower:true},
-];
-const FEED_DATA=[
-{id:1,userId:"u1",action:"rated",mediaTitle:"Dune: Part Two",mediaType:"film",rating:9.2,comment:"Villeneuve simply cannot miss.",time:"2h ago",likes:14},
-{id:2,userId:"u2",action:"completed",mediaTitle:"The Last of Us S2",mediaType:"series",rating:8.8,comment:"Episode 4 is some of the best TV I've seen.",time:"5h ago",likes:22},
-{id:3,userId:"u4",action:"rated",mediaTitle:"Brat",mediaType:"music",rating:9.0,comment:"Not just good pop — actually culturally important.",time:"8h ago",likes:41},
-{id:4,userId:"u2",action:"rated",mediaTitle:"Balatro",mediaType:"game",rating:9.8,comment:"LocalThunk is a genius.",time:"1d ago",likes:38},
-];
-function Friends(){
-const[following,setFollowing]=useState(["u1","u2","u4"]);const[followers]=useState(["u1","u2","u4"]);const[liked,setLiked]=useState([]);const[sub,setSub]=useState("feed");
-const mutuals=following.filter(id=>followers.includes(id));
-const feed=FEED_DATA.filter(a=>mutuals.includes(a.userId));
-const actionM={rated:{label:"rated",color:PRI},completed:{label:"completed",color:"#4ADE80"}};
-return(
-<div style={{maxWidth:540,margin:"0 auto",padding:"24px 0 80px"}}>
-<div style={{marginBottom:16}}>
-<div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:10,fontWeight:700,letterSpacing:3,color:PRI,textTransform:"uppercase",marginBottom:5}}>Social</div>
-<h2 style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:22,color:TXT,margin:"0 0 4px"}}>Stacked with Friends</h2>
-<p style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,margin:0}}>Mutual follows only. Both must follow each other to share activity.</p>
-</div>
-<div style={{display:"flex",gap:0,marginBottom:18,background:DIM,borderRadius:8,padding:3,border:`1px solid ${BOR}`}}>
-{[["feed","Feed"],["people","People"]].map(([id,label])=>(
-<button key={id} onClick={()=>setSub(id)} style={{flex:1,padding:"7px 0",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:sub===id?700:500,fontSize:11,background:sub===id?SURF:"transparent",color:sub===id?TXT:MUT,border:`1px solid ${sub===id?BOR:"transparent"}`,cursor:"pointer"}}>{label}</button>
-))}
-</div>
-{sub==="feed"&&<div>
-<div style={{display:"flex",gap:9,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
-{FRIENDS_DATA.filter(u=>mutuals.includes(u.id)).map(u=>(
-<div key={u.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,flexShrink:0}}>
-<div style={{width:44,height:44,borderRadius:"50%",padding:2,background:`linear-gradient(135deg,${u.color},${PRI})`,boxSizing:"border-box"}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:12,color:u.color}}>{u.avatar}</div></div>
-<span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,color:MUT,maxWidth:44,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{u.name.split(" ")[0]}</span>
-</div>
-))}
-</div>
-<div style={{display:"flex",flexDirection:"column",gap:9}}>
-{feed.map(act=>{
-const user=FRIENDS_DATA.find(u=>u.id===act.userId);const meta=actionM[act.action]||actionM.rated;const isLiked=liked.includes(act.id);
-const[lb,col]=act.rating!=null?grade(act.rating):["",""];
-return(
-<div key={act.id} style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:11,overflow:"hidden"}}>
-<div style={{padding:"11px 13px 0",display:"flex",alignItems:"center",gap:9}}>
-<div style={{width:34,height:34,borderRadius:"50%",padding:2,background:`linear-gradient(135deg,${user.color},${PRI})`,boxSizing:"border-box",flexShrink:0}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:10,color:user.color}}>{user.avatar}</div></div>
-<div style={{flex:1,minWidth:0}}><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><span style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT}}>{user.name}</span><span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:meta.color,fontWeight:600}}>{meta.label}</span></div><span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>{act.time}</span></div>
-{act.rating!=null&&<Pill value={act.rating}/>}
-</div>
-<div style={{margin:"9px 13px",background:DIM,borderRadius:7,padding:"9px 11px",border:`1px solid ${BOR}`,display:"flex",gap:9,alignItems:"center"}}>
-<div style={{width:28,height:28,borderRadius:5,background:TC[act.mediaType]+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:8,fontWeight:800,color:TC[act.mediaType],textTransform:"uppercase"}}>{act.mediaType.slice(0,3)}</span></div>
-<div style={{flex:1,minWidth:0}}><div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{act.mediaTitle}</div>{lb&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:col,fontWeight:600}}>{lb}</div>}</div>
-</div>
-{act.comment&&<div style={{margin:"0 13px 9px",fontFamily:"'Barlow',sans-serif",fontSize:12,color:"#B8B4D8",lineHeight:1.6}}>{act.comment}</div>}
-<div style={{borderTop:`1px solid ${BOR}`,padding:"7px 13px",display:"flex",alignItems:"center",gap:12}}>
-<button onClick={()=>setLiked(l=>l.includes(act.id)?l.filter(x=>x!==act.id):[...l,act.id])} style={{background:"transparent",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontFamily:"'Barlow',sans-serif",fontSize:11,color:isLiked?ACC:MUT,fontWeight:isLiked?700:400,padding:0}}>
-<svg width={12} height={12} viewBox="0 0 24 24" fill={isLiked?ACC:"none"} stroke={isLiked?ACC:MUT} strokeWidth={2}><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-{act.likes+(isLiked?1:0)}
-</button>
-<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,marginLeft:"auto"}}>@{user.handle}</span>
-</div>
-</div>
-);
-})}
-</div>
-</div>}
-{sub==="people"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
-<div style={{background:`${PRI}10`,border:`1px solid ${PRI}30`,borderRadius:8,padding:"9px 13px",marginBottom:6,display:"flex",gap:7,alignItems:"center"}}>
-<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={PRI} strokeWidth={2}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx={9} cy={7} r={4}/></svg>
-<span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:PRI}}>Activity only visible when <strong>both users follow each other</strong>.</span>
-</div>
-{FRIENDS_DATA.map(user=>{
-const isF=following.includes(user.id);const isFr=followers.includes(user.id);const mutual=isF&&isFr;
-return(
-<div key={user.id} style={{background:SURF,border:`1px solid ${mutual?PRI+"40":BOR}`,borderRadius:11,padding:"13px 15px",display:"flex",alignItems:"center",gap:11}}>
-<div style={{width:42,height:42,borderRadius:"50%",padding:mutual?2:0,background:mutual?`linear-gradient(135deg,${user.color},${PRI})`:"transparent",boxSizing:"border-box",flexShrink:0}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:13,color:user.color,border:mutual?"none":`1.5px solid ${user.color}44`}}>{user.avatar}</div></div>
-<div style={{flex:1,minWidth:0}}>
-<div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,color:TXT}}>{user.name}</div>
-<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>@{user.handle}</div>
-<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB,marginTop:2}}>{user.bio}</div>
-{mutual&&<div style={{display:"inline-flex",alignItems:"center",gap:3,marginTop:3,background:PRI+"14",border:`1px solid ${PRI}30`,borderRadius:9,padding:"1px 7px"}}><svg width={7} height={7} viewBox="0 0 24 24" fill="none" stroke={PRI} strokeWidth={2.5} strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg><span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,fontWeight:700,color:PRI}}>MUTUAL</span></div>}
-</div>
-<button onClick={()=>setFollowing(f=>f.includes(user.id)?f.filter(x=>x!==user.id):[...f,user.id])} style={{padding:"5px 13px",borderRadius:16,fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:10,cursor:"pointer",border:`1px solid ${isF?BOR:PRI}`,background:isF?DIM:`${PRI}18`,color:isF?MUT:PRI,flexShrink:0}}>{isF?"Following":"Follow"}</button>
-</div>
-);
-})}
-</div>}
-</div>
-);
-}
-
-export default function App(){
-const[st,setSt]=useState("auth");
-const[user,setUser]=useState(null);
-const[prof,setProf]=useState(null);
-const[tab,setTab]=useState("browse");
-const[sel,setSel]=useState(null);
-const[logged,setLogged]=useState({});
-const[agent,setAgent]=useState(false);
-const onAuth=u=>{setUser(u);if(u.isNew){setSt("setup");}else{setProf({...u,displayName:u.name,handle:u.handle||"demo",bio:"",avatarColor:PRI,avatarEmoji:"",bannerCss:"linear-gradient(135deg,#1a1040,#6C63FF)",top6:{}});setSt("app");}};
-const onLog=item=>setLogged(prev=>({...prev,[item.id]:{...item}}));
-const init=prof?(prof.displayName||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase():"";
-const TABS=[{id:"browse",lb:"Browse"},{id:"profile",lb:"My Profile"},{id:"friends",lb:"Friends"},{id:"takes",lb:"Hot Takes"}];
-if(st==="auth")return(<><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/><Auth onAuth={onAuth}/></>);
-if(st==="setup")return(<><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/><Setup user={user} onDone={p=>{setProf(p);setSt("app");}}/></>);
-return(
-<div style={{minHeight:"100vh",background:BG}}>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/>
-<style>{`*{box-sizing:border-box}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#2E3058;border-radius:2px}`}</style>
-<header style={{position:"sticky",top:0,zIndex:100,background:`${BG}F8`,backdropFilter:"blur(20px)",borderBottom:`1px solid ${BOR}`}}>
-<div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px",height:52,display:"flex",alignItems:"center",gap:14}}>
-<Logo/>
-<div style={{display:"flex",gap:2}}>
-{TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 11px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:tab===t.id?700:500,fontSize:12,background:tab===t.id?DIM:"transparent",color:tab===t.id?TXT:MUT,border:tab===t.id?`1px solid ${BOR}`:"1px solid transparent",cursor:"pointer"}}>{t.lb}</button>)}
-</div>
-<div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}}>
-<div onClick={()=>setTab("profile")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:14,border:`1px solid ${BOR}`,background:SURF}}>
-<div style={{width:20,height:20,borderRadius:"50%",background:prof?.avatarColor||PRI,display:"flex",alignItems:"center",justifyContent:"center",fontSize:prof?.avatarEmoji?10:7,fontWeight:800,color:"#fff"}}>{prof?.avatarEmoji||init}</div>
-<span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB}}>@{prof?.handle}</span>
-</div>
-<button onClick={()=>{setSt("auth");setUser(null);setProf(null);setLogged({});setTab("browse");}} style={{background:"transparent",border:`1px solid ${BOR}`,color:MUT,padding:"4px 9px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:11,cursor:"pointer"}}>Log out</button>
-</div>
-</div>
-</header>
-<div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px"}}>
-{tab==="browse"&&<Browse logged={logged} onLog={onLog} onOpen={setSel}/>}
-{tab==="profile"&&prof&&<MyProfile profile={prof} logged={logged} onEdit={()=>setSt("setup")}/>}
-{tab==="friends"&&<Friends/>}
-{tab==="takes"&&<Takes/>}
-</div>
-<button onClick={()=>setAgent(v=>!v)} style={{position:"fixed",bottom:22,right:22,width:48,height:48,borderRadius:"50%",background:`linear-gradient(135deg,${PRI},${ACC})`,border:"none",cursor:"pointer",boxShadow:`0 4px 20px ${PRI}50`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:600}}>
-{agent?<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>:<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round"><circle cx={12} cy={12} r={3}/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>}
-</button>
-{agent&&<Agent onClose={()=>setAgent(false)}/>}
-{sel&&<Modal item={sel} onClose={()=>setSel(null)} onLog={onLog}/>}
-</div>
-);
-}
