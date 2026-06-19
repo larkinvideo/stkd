@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 const BG="#07080F",SURF="#0D0E1C",BOR="#1C1D32",PRI="#6C63FF",ACC="#FF5C5C",TXT="#ECEAF8",MUT="#4A4A6E",DIM="#111222",SUB="#9896B8";
-const ANTHROPIC_KEY=import.meta.env.VITE_ANTHROPIC_KEY;
+const ANTHROPIC_KEY=import.meta.env.VITE_ANTHROPIC_KEY||"";
 const TC={film:"#FF5C5C",series:"#6C63FF",game:"#00D4AA",book:"#FF9B50",manga:"#FF6BA8",music:"#5CB8FF",podcast:"#A8FF5C"};
 
 function grade(s){
