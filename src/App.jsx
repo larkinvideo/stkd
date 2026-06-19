@@ -48,7 +48,7 @@ if(all||type==="podcast"){const d=await(await fetch(`https://itunes.apple.com/se
 }catch{}
 if(res.length>0)return res;
 // AI fallback
-const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,messages:[{role:"user",content:`Search "${q}" across ${type==="all"?"films,series,games,books,manga,music,podcasts":type+"s"}. Return ONLY a JSON array starting [ ending ]. Each: {"id":"x1","title":"title","type":"film|series|game|book|manga|music|podcast","year":"YYYY","credit":"creator","overview":"1-2 sentences","tags":["genre"],"cover":null}`}]})});
+const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,messages:[{role:"user",content:`Search "${q}" across ${type==="all"?"films,series,games,books,manga,music,podcasts":type+"s"}. Return ONLY a JSON array starting [ ending ]. Each: {"id":"x1","title":"title","type":"film|series|game|book|manga|music|podcast","year":"YYYY","credit":"creator","overview":"1-2 sentences","tags":["genre"],"cover":null}`}]})});
 const data=await r.json();
 const raw=data.content?.map(b=>b.text||"").join("")||"";
 const s=raw.indexOf("["),e=raw.lastIndexOf("]");
@@ -498,7 +498,7 @@ const send=async()=>{
 if(!input.trim()||loading)return;const txt=input.trim();setInput("");setMsgs(m=>[...m,{role:"user",text:txt}]);setLoading(true);
 try{
 const hist=msgs.map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.text}));
-const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:700,system:"You are Stkd's AI media agent. Help users find specific media and give recommendations. Keep responses concise. Format recs as: Title (Type, Year) — reason.",messages:[...hist,{role:"user",content:txt}]})});
+const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:700,system:"You are Stkd's AI media agent. Help users find specific media and give recommendations. Keep responses concise. Format recs as: Title (Type, Year) — reason.",messages:[...hist,{role:"user",content:txt}]})});
 const d=await res.json();
 setMsgs(m=>[...m,{role:"assistant",text:d.content?.map(b=>b.text||"").join("")||"Sorry, try again!"}]);
 }catch{setMsgs(m=>[...m,{role:"assistant",text:"Connection error."}]);}
