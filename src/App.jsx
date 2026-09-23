@@ -2,7 +2,15 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
 
 const BG="#07080F",SURF="#0D0E1C",BOR="#1C1D32",PRI="#6C63FF",ACC="#FF5C5C",TXT="#ECEAF8",MUT="#4A4A6E",DIM="#111222",SUB="#9896B8";
-const ANTHROPIC_KEY=import.meta.env.VITE_ANTHROPIC_KEY||"";
+// Calls the /api/chat proxy with the current Supabase session token. Throws on non-2xx.
+async function callChat(body){
+const{data:{session}}=await supabase.auth.getSession();
+if(!session)throw new Error("You need to be logged in.");
+const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify(body)});
+const d=await r.json().catch(()=>({}));
+if(!r.ok)throw new Error(r.status===429?"Daily limit reached, try again tomorrow.":d.error||`Request failed (${r.status})`);
+return d;
+}
 const TC={film:"#FF5C5C",series:"#6C63FF",game:"#00D4AA",book:"#FF9B50",manga:"#FF6BA8",music:"#5CB8FF",podcast:"#A8FF5C"};
 
 function grade(s){
@@ -49,8 +57,7 @@ if(all||type==="podcast"){const d=await(await fetch(`https://itunes.apple.com/se
 }catch{}
 if(res.length>0)return res;
 // AI fallback
-const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,messages:[{role:"user",content:`Search "${q}" across ${type==="all"?"films,series,games,books,manga,music,podcasts":type+"s"}. Return ONLY a JSON array starting [ ending ]. Each: {"id":"x1","title":"title","type":"film|series|game|book|manga|music|podcast","year":"YYYY","credit":"creator","overview":"1-2 sentences","tags":["genre"],"cover":null}`}]})});
-const data=await r.json();
+const data=await callChat({mode:"search",query:q,type});
 const raw=data.content?.map(b=>b.text||"").join("")||"";
 const s=raw.indexOf("["),e=raw.lastIndexOf("]");
 if(s===-1||e===-1)return[];
@@ -323,12 +330,12 @@ return(
 }
 
 function Browse({logged,onLog,onOpen}){
-const[q,setQ]=useState("");const[type,setType]=useState("all");const[res,setRes]=useState([]);const[loading,setLoading]=useState(false);
+const[q,setQ]=useState("");const[type,setType]=useState("all");const[res,setRes]=useState([]);const[loading,setLoading]=useState(false);const[aiErr,setAiErr]=useState("");
 const dq=useDb(q,700);
 useEffect(()=>{
 if(!dq.trim()){setRes([]);return;}
 let cancelled=false;
-(async()=>{setLoading(true);try{const r=await doSearch(dq,type);if(!cancelled)setRes(r);}catch{if(!cancelled)setRes([]);}if(!cancelled)setLoading(false);})();
+(async()=>{setLoading(true);setAiErr("");try{const r=await doSearch(dq,type);if(!cancelled)setRes(r);}catch(e){if(!cancelled){setRes([]);setAiErr(e.message||"");}}if(!cancelled)setLoading(false);})();
 return()=>{cancelled=true;};
 },[dq,type]);
 const TYPES=["all","film","series","game","book","manga","music","podcast"];
@@ -342,7 +349,7 @@ return(
 <div style={{position:"relative",maxWidth:480}}>
 {loading?<div style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",width:13,height:13,borderRadius:"50%",border:`2px solid ${PRI}`,borderTopColor:"transparent",animation:"sp 0.8s linear infinite"}}/>:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={MUT} strokeWidth={2} style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)"}}><circle cx={11} cy={11} r={8}/><line x1={21} y1={21} x2={16.65} y2={16.65}/></svg>}
 <style>{`@keyframes sp{to{transform:translateY(-50%) rotate(360deg)}}`}</style>
-<input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search films, series, games, books, manga, music, podcasts…" style={{width:"100%",background:SURF,border:`1.5px solid #2E3058`,borderRadius:12,padding:"12px 38px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:14,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=PRI+"90"} onBlur={e=>e.target.style.borderColor="#2E3058"}/>
+<input value={q} maxLength={500} onChange={e=>setQ(e.target.value)} placeholder="Search films, series, games, books, manga, music, podcasts…" style={{width:"100%",background:SURF,border:`1.5px solid #2E3058`,borderRadius:12,padding:"12px 38px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:14,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=PRI+"90"} onBlur={e=>e.target.style.borderColor="#2E3058"}/>
 {q&&<button onClick={()=>{setQ("");setRes([]);}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:DIM,border:"none",color:MUT,cursor:"pointer",width:20,height:20,borderRadius:"50%",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}
 </div>
 {!q&&<div style={{display:"flex",gap:5,marginTop:10,flexWrap:"wrap",alignItems:"center"}}><span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>Try:</span>{SUGGEST.map(s=><button key={s} onClick={()=>setQ(s)} style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:12,padding:"3px 10px",fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB,cursor:"pointer"}}>{s}</button>)}</div>}
@@ -351,7 +358,7 @@ return(
 {TYPES.map(t=>{const a=type===t;return<button key={t} onClick={()=>setType(t)} style={{padding:"5px 11px",fontSize:11,fontFamily:"'Barlow',sans-serif",fontWeight:a?700:400,background:a?DIM:"transparent",color:a?TXT:MUT,border:"none",borderRight:`1px solid ${BOR}`,cursor:"pointer"}}>{t==="all"?"All":t.charAt(0).toUpperCase()+t.slice(1)}</button>;})}
 </div>
 {!q&&<div style={{textAlign:"center",padding:"60px 0"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:15,fontWeight:700,color:"#1C1D32",letterSpacing:2}}>SEARCH ANYTHING</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:13,color:MUT,marginTop:5}}>Films · Series · Games · Books · Manga · Music · Podcasts</div></div>}
-{q&&!loading&&res.length===0&&<div style={{textAlign:"center",padding:"60px 0",fontFamily:"'Barlow Condensed',sans-serif",fontSize:15,fontWeight:700,color:"#1C1D32",letterSpacing:2}}>NO RESULTS</div>}
+{q&&!loading&&res.length===0&&<div style={{textAlign:"center",padding:"60px 0",fontFamily:"'Barlow Condensed',sans-serif",fontSize:15,fontWeight:700,color:"#1C1D32",letterSpacing:2}}>NO RESULTS{aiErr&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:13,fontWeight:500,letterSpacing:0,color:ACC,marginTop:8}}>{aiErr}</div>}</div>}
 {res.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:12,paddingBottom:100}}>{res.map(item=><MediaCard key={item.id} item={item} onOpen={onOpen} rating={logged[item.id]?.userRating}/>)}</div>}
 </div>
 );
@@ -548,10 +555,9 @@ const send=async()=>{
 if(!input.trim()||loading)return;const txt=input.trim();setInput("");setMsgs(m=>[...m,{role:"user",text:txt}]);setLoading(true);
 try{
 const hist=msgs.map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.text}));
-const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:700,system:"You are Stkd's AI media agent. Help users find specific media and give recommendations. Keep responses concise. Format recs as: Title (Type, Year) — reason.",messages:[...hist,{role:"user",content:txt}]})});
-const d=await res.json();
+const d=await callChat({mode:"chat",messages:[...hist,{role:"user",content:txt}]});
 setMsgs(m=>[...m,{role:"assistant",text:d.content?.map(b=>b.text||"").join("")||"Sorry, try again!"}]);
-}catch{setMsgs(m=>[...m,{role:"assistant",text:"Connection error."}]);}
+}catch(e){setMsgs(m=>[...m,{role:"assistant",text:e.message||"Connection error."}]);}
 setLoading(false);
 };
 return(
@@ -574,7 +580,7 @@ return(
 <div ref={bot}/>
 </div>
 <div style={{borderTop:`1px solid ${BOR}`,padding:"8px 10px",display:"flex",gap:7}}>
-<input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()} placeholder="Ask about any media…" style={{flex:1,background:BG,border:`1px solid ${BOR}`,borderRadius:7,padding:"7px 10px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:12,outline:"none"}} onFocus={e=>e.target.style.borderColor=PRI+"60"} onBlur={e=>e.target.style.borderColor=BOR}/>
+<input value={input} maxLength={500} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()} placeholder="Ask about any media…" style={{flex:1,background:BG,border:`1px solid ${BOR}`,borderRadius:7,padding:"7px 10px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:12,outline:"none"}} onFocus={e=>e.target.style.borderColor=PRI+"60"} onBlur={e=>e.target.style.borderColor=BOR}/>
 <button onClick={send} disabled={!input.trim()||loading} style={{background:input.trim()&&!loading?PRI:DIM,border:"none",borderRadius:7,padding:"0 12px",color:input.trim()&&!loading?"#fff":MUT,cursor:input.trim()&&!loading?"pointer":"not-allowed",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,flexShrink:0}}>↑</button>
 </div>
 </div>
