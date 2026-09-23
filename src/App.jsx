@@ -133,6 +133,23 @@ const cleanHandle=h=>h.toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,20);
 const BANNER_DEFAULT="linear-gradient(135deg,#1a1040,#6C63FF)";
 const fromRow=r=>({id:r.id,handle:r.handle,name:r.display_name,displayName:r.display_name,bio:r.bio||"",avatarColor:r.avatar_color||PRI,avatarEmoji:r.avatar_emoji||"",bannerCss:r.banner_css||BANNER_DEFAULT,top6:r.top6||{}});
 
+const PROF_COLS="id,handle,display_name,bio,avatar_color,avatar_emoji";
+const initialsOf=n=>(n||"U").split(" ").filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase()||"U";
+function ago(ts){
+const s=Math.max(0,(Date.now()-new Date(ts).getTime())/1000);
+if(s<60)return"just now";if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;if(s<604800)return`${Math.floor(s/86400)}d ago`;
+return new Date(ts).toLocaleDateString();
+}
+const ratingFromRow=r=>({id:r.media_id,title:r.title,type:r.type,year:r.year||"",credit:r.credit||"",cover:r.cover||null,overview:"",tags:[],userRating:Number(r.rating),status:r.status||null,comment:r.comment||""});
+function Avatar({p,size,ring}){
+const col=p?.avatar_color||PRI;
+return(
+<div style={{width:size,height:size,borderRadius:"50%",padding:ring?2:0,background:ring?`linear-gradient(135deg,${col},${PRI})`:"transparent",boxSizing:"border-box",flexShrink:0}}>
+<div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:Math.round(size*(p?.avatar_emoji?0.42:0.3)),color:col,border:ring?"none":`1.5px solid ${col}44`,boxSizing:"border-box"}}>{p?.avatar_emoji||initialsOf(p?.display_name||p?.handle)}</div>
+</div>
+);
+}
+
 function Auth(){
 const[mode,setMode]=useState("login");
 const[f,setF]=useState({name:"",handle:"",email:"",pw:""});
@@ -282,14 +299,16 @@ return(
 );
 }
 
-function Modal({item,onClose,onLog}){
-const[rat,setRat]=useState(5);
-const[rev,setRev]=useState("");
-const[st,setSt]=useState(null);
+function Modal({item,existing,onClose,onLog}){
+const[rat,setRat]=useState(existing?.userRating??5);
+const[rev,setRev]=useState(existing?.comment||"");
+const[st,setSt]=useState(existing?.status||null);
 const[done,setDone]=useState(false);
+const[busy,setBusy]=useState(false);
+const[err,setErr]=useState("");
 const tc=TC[item.type];
 const[lb,col]=grade(rat);
-const go=()=>{setDone(true);onLog({...item,userRating:rat,status:st});};
+const go=async()=>{if(busy)return;setBusy(true);setErr("");try{await onLog({...item,userRating:rat,status:st,comment:rev.trim()});setDone(true);}catch(e){setErr(e.message||"Couldn't save your rating.");}setBusy(false);};
 return(
 <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(7,8,15,0.93)",backdropFilter:"blur(16px)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1000,padding:20,overflowY:"auto"}}>
 <style>{`@keyframes mI{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}`}</style>
@@ -309,14 +328,15 @@ return(
 </div>
 <div style={{borderTop:`1px solid ${BOR}`,padding:"14px 18px"}}>
 <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
-{["Completed","In Progress","Plan to","Dropped"].map(s=><button key={s} onClick={()=>setSt(s)} style={{padding:"4px 10px",borderRadius:12,fontSize:11,fontFamily:"'Barlow',sans-serif",fontWeight:600,border:`1px solid ${st===s?tc+"70":BOR}`,background:st===s?tc+"12":DIM,color:st===s?tc:MUT,cursor:"pointer"}}>{s}</button>)}
+{["Completed","In Progress","Plan to","Dropped"].map(s=><button key={s} disabled={done} onClick={()=>setSt(st===s?null:s)} style={{padding:"4px 10px",borderRadius:12,fontSize:11,fontFamily:"'Barlow',sans-serif",fontWeight:600,border:`1px solid ${st===s?tc+"70":BOR}`,background:st===s?tc+"12":DIM,color:st===s?tc:MUT,cursor:done?"default":"pointer"}}>{s}</button>)}
 </div>
 {!done?<>
-<div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:12}}>Your Rating</div>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:12}}>{existing?"Update Your Rating":"Your Rating"}</div>
 <RSlider val={rat} setVal={setRat}/>
-<textarea value={rev} onChange={e=>setRev(e.target.value)} placeholder="Review (optional)…" style={{width:"100%",background:BG,border:`1px solid ${BOR}`,borderRadius:5,padding:"8px 10px",color:"#C8C4E0",fontFamily:"'Barlow',sans-serif",fontSize:12,resize:"none",height:48,boxSizing:"border-box",outline:"none",marginBottom:10,marginTop:10}}/>
+<textarea value={rev} onChange={e=>setRev(e.target.value.slice(0,1000))} placeholder="Review (optional)…" style={{width:"100%",background:BG,border:`1px solid ${BOR}`,borderRadius:5,padding:"8px 10px",color:"#C8C4E0",fontFamily:"'Barlow',sans-serif",fontSize:12,resize:"none",height:48,boxSizing:"border-box",outline:"none",marginBottom:10,marginTop:10}}/>
+{err&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:ACC,marginBottom:8}}>{err}</div>}
 <div style={{display:"flex",gap:7}}>
-<button onClick={go} style={{flex:1,padding:10,borderRadius:6,border:"none",background:PRI,color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,cursor:"pointer"}}>Log · {rat.toFixed(1)} — {lb}</button>
+<button onClick={go} disabled={busy} style={{flex:1,padding:10,borderRadius:6,border:"none",background:PRI,color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,cursor:busy?"wait":"pointer",opacity:busy?0.7:1}}>{busy?"Saving…":`Log · ${rat.toFixed(1)} — ${lb}`}</button>
 <button onClick={onClose} style={{padding:"10px 13px",borderRadius:6,border:`1px solid ${BOR}`,background:"transparent",color:MUT,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer"}}>✕</button>
 </div>
 </>:<div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",background:"#081508",border:"1px solid #1A3A18",borderRadius:6}}>
@@ -403,50 +423,75 @@ return(<div key={type} style={{marginBottom:13}}>
 );
 }
 
-function Takes(){
-const SEED=[
-{id:1,u:"cinematica_v",av:"CV",take:"Breaking Bad is overrated. The Wire does everything it does but with more humanity.",ref:"Series",up:342,dn:89,replies:[{id:1,u:"serieshead",t:"BB is about ego, The Wire is about systems. Different goals."}]},
-{id:2,u:"ludomancer",av:"LM",take:"Elden Ring is FromSoft's worst game. Dark Souls 1 has more interesting design in two hours.",ref:"Games",up:218,dn:201,replies:[]},
-{id:3,u:"freq_witch",av:"FW",take:"Brat is the most culturally significant album of the 2020s and it's not even close.",ref:"Music",up:509,dn:122,replies:[{id:1,u:"melomaniac_r",t:"Kendrick's output this year says otherwise."}]},
-];
-const[takes,setTakes]=useState(SEED);const[nt,setNt]=useState("");const[nm,setNm]=useState("");const[err,setErr]=useState("");const[ok,setOk]=useState(false);const[openR,setOR]=useState({});const[repO,setRepO]=useState({});const[repI,setRepI]=useState({});
-const heat=t=>t.up/(t.up+t.dn+1);
-const post=()=>{if(!isSafe(nt)){setErr("Please keep it respectful.");return;}if(nt.trim().length<20){setErr("At least 20 characters.");return;}setTakes(t=>[{id:Date.now(),u:"you",av:"YO",take:nt.trim(),ref:nm.trim()||"General",up:0,dn:0,replies:[]},...t]);setNt("");setNm("");setErr("");setOk(true);setTimeout(()=>setOk(false),3000);};
-const vote=(id,d)=>setTakes(t=>t.map(tk=>tk.id===id?{...tk,[d==="up"?"up":"dn"]:tk[d==="up"?"up":"dn"]+1}:tk));
-const reply=tid=>{const text=(repI[tid]||"").trim();if(!isSafe(text)||text.length<5)return;setTakes(t=>t.map(tk=>tk.id===tid?{...tk,replies:[...tk.replies,{id:Date.now(),u:"you",t:text}]}:tk));setRepI(r=>({...r,[tid]:""}));};
+const TAKE_COLS=`id,text,media_title,created_at,user_id,profiles!takes_user_id_fkey(${PROF_COLS}),take_votes(user_id,vote)`;
+const fetchTakes=()=>supabase.from("takes").select(TAKE_COLS).order("created_at",{ascending:false}).limit(100);
+function Takes({me}){
+const[takes,setTakes]=useState([]);const[loading,setLoading]=useState(true);const[loadErr,setLoadErr]=useState("");
+const[nt,setNt]=useState("");const[nm,setNm]=useState("");const[err,setErr]=useState("");const[ok,setOk]=useState(false);const[busy,setBusy]=useState(false);
+const applyTakes=useCallback(({data,error})=>{if(error)setLoadErr(error.message);else{setTakes(data);setLoadErr("");}setLoading(false);},[]);
+const load=()=>fetchTakes().then(applyTakes);
+useEffect(()=>{let live=true;fetchTakes().then(r=>{if(live)applyTakes(r);});return()=>{live=false;};},[applyTakes]);
+const counts=t=>({up:t.take_votes.filter(v=>v.vote==="agree").length,dn:t.take_votes.filter(v=>v.vote==="disagree").length,mine:t.take_votes.find(v=>v.user_id===me.id)?.vote||null});
+const heat=({up,dn})=>up/(up+dn+1);
+const post=async()=>{
+if(busy)return;const text=nt.trim();
+if(!isSafe(text)||!isSafe(nm)){setErr("Please keep it respectful.");return;}
+if(text.length<20){setErr("At least 20 characters.");return;}
+if(text.length>280){setErr("280 characters max.");return;}
+setBusy(true);
+const{data,error}=await supabase.from("takes").insert({text,media_title:nm.trim()||null}).select(TAKE_COLS).single();
+setBusy(false);
+if(error){setErr(error.message);return;}
+setTakes(t=>[data,...t]);setNt("");setNm("");setErr("");setOk(true);setTimeout(()=>setOk(false),3000);
+};
+const vote=async(take,v)=>{
+const mine=take.take_votes.find(x=>x.user_id===me.id);
+const next=mine?.vote===v?null:v;
+setTakes(ts=>ts.map(t=>t.id!==take.id?t:{...t,take_votes:[...t.take_votes.filter(x=>x.user_id!==me.id),...(next?[{user_id:me.id,vote:next}]:[])]}));
+const q=supabase.from("take_votes");
+const{error}=!next?await q.delete().eq("take_id",take.id).eq("user_id",me.id):mine?await q.update({vote:next}).eq("take_id",take.id).eq("user_id",me.id):await q.insert({take_id:take.id,vote:next});
+if(error)load();
+};
+const del=async take=>{
+if(!window.confirm("Delete this take?"))return;
+const{error}=await supabase.from("takes").delete().eq("id",take.id);
+if(error){setLoadErr(error.message);return;}
+setTakes(ts=>ts.filter(t=>t.id!==take.id));
+};
 return(
 <div style={{maxWidth:660,margin:"0 auto",padding:"24px 0 80px"}}>
 <div style={{marginBottom:18}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:11,fontWeight:700,letterSpacing:3,color:ACC,textTransform:"uppercase",marginBottom:5}}>Community</div><h2 style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:24,color:TXT,margin:0}}>Hot Takes</h2></div>
 <div style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-<textarea value={nt} onChange={e=>{setNt(e.target.value);setErr("");}} placeholder="Your hot take about any film, series, game, book, manga, or music…" style={{width:"100%",background:BG,border:`1px solid ${err?ACC:BOR}`,borderRadius:6,padding:"8px 10px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,resize:"none",height:66,boxSizing:"border-box",outline:"none",marginBottom:6}}/>
-<div style={{display:"flex",gap:7}}>
-<input value={nm} onChange={e=>setNm(e.target.value)} placeholder="Media reference…" style={{flex:1,background:BG,border:`1px solid ${BOR}`,borderRadius:6,padding:"6px 9px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:12,outline:"none"}}/>
-<button onClick={post} style={{background:ACC,border:"none",borderRadius:6,padding:"6px 14px",color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,cursor:"pointer"}}>Post</button>
+<textarea value={nt} maxLength={280} onChange={e=>{setNt(e.target.value);setErr("");}} placeholder="Your hot take about any film, series, game, book, manga, or music…" style={{width:"100%",background:BG,border:`1px solid ${err?ACC:BOR}`,borderRadius:6,padding:"8px 10px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,resize:"none",height:66,boxSizing:"border-box",outline:"none",marginBottom:6}}/>
+<div style={{display:"flex",gap:7,alignItems:"center"}}>
+<input value={nm} maxLength={100} onChange={e=>setNm(e.target.value)} placeholder="Media reference…" style={{flex:1,minWidth:0,background:BG,border:`1px solid ${BOR}`,borderRadius:6,padding:"6px 9px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:12,outline:"none"}}/>
+<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:nt.length>260?ACC:MUT}}>{nt.length}/280</span>
+<button onClick={post} disabled={busy} style={{background:ACC,border:"none",borderRadius:6,padding:"6px 14px",color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,cursor:busy?"wait":"pointer",opacity:busy?0.7:1}}>{busy?"…":"Post"}</button>
 </div>
 {err&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:ACC,marginTop:5}}>{err}</div>}
 {ok&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:"#4ADE80",marginTop:5}}>✓ Posted.</div>}
 </div>
+{loadErr&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:ACC,marginBottom:10}}>{loadErr}</div>}
+{loading&&<div style={{textAlign:"center",padding:"40px 0",fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT}}>Loading…</div>}
+{!loading&&!takes.length&&!loadErr&&<div style={{textAlign:"center",padding:"40px 0"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,color:"#1C1D32",letterSpacing:1}}>NO TAKES YET</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:4}}>Be the first to start an argument.</div></div>}
 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-{[...takes].sort((a,b)=>heat(b)-heat(a)).map(take=>{const h=heat(take);const hc=h>0.75?ACC:h>0.5?PRI:"#555";
+{takes.map(take=>{const c=counts(take);const h=heat(c);const hc=h>0.75?ACC:h>0.5?PRI:"#555";const p=take.profiles;
 return(
 <div key={take.id} style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:10,overflow:"hidden"}}>
 <div style={{padding:"12px 13px 10px"}}>
 <div style={{display:"flex",gap:8}}>
-<div style={{width:27,height:27,borderRadius:"50%",background:`${hc}22`,border:`1.5px solid ${hc}44`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:8,color:hc,flexShrink:0}}>{take.av}</div>
-<div style={{flex:1}}>
-<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}><span style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT}}>@{take.u}</span><span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,background:DIM,border:`1px solid ${BOR}`,padding:"1px 5px",borderRadius:8}}>{take.ref}</span>{h>0.75&&<span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,fontWeight:700,color:ACC}}>🔥</span>}</div>
-<p style={{fontFamily:"'Barlow',sans-serif",fontSize:13,color:TXT,margin:0,lineHeight:1.6,fontStyle:"italic"}}>"{take.take}"</p>
+<div style={{width:27,height:27,borderRadius:"50%",background:`${hc}22`,border:`1.5px solid ${hc}44`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:p?.avatar_emoji?12:8,color:hc,flexShrink:0}}>{p?.avatar_emoji||initialsOf(p?.display_name||p?.handle)}</div>
+<div style={{flex:1,minWidth:0}}>
+<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}><span style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT}}>@{p?.handle||"unknown"}</span><span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,background:DIM,border:`1px solid ${BOR}`,padding:"1px 5px",borderRadius:8}}>{take.media_title||"General"}</span>{h>0.75&&<span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,fontWeight:700,color:ACC}}>🔥</span>}<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>{ago(take.created_at)}</span></div>
+<p style={{fontFamily:"'Barlow',sans-serif",fontSize:13,color:TXT,margin:0,lineHeight:1.6,fontStyle:"italic",overflowWrap:"anywhere"}}>"{take.text}"</p>
 </div>
 </div>
 </div>
 <div style={{borderTop:`1px solid ${BOR}`,padding:"7px 13px",display:"flex",gap:7,alignItems:"center"}}>
-<button onClick={()=>vote(take.id,"up")} style={{display:"flex",alignItems:"center",gap:3,background:DIM,border:`1px solid ${BOR}`,borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,fontWeight:700,color:"#4ADE80"}}><svg width={9} height={9} viewBox="0 0 24 24" fill="#4ADE80"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/></svg>{take.up}</button>
-<button onClick={()=>vote(take.id,"down")} style={{display:"flex",alignItems:"center",gap:3,background:DIM,border:`1px solid ${BOR}`,borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,fontWeight:700,color:ACC}}><svg width={9} height={9} viewBox="0 0 24 24" fill={ACC}><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3H10z"/></svg>{take.dn}</button>
-{take.replies.length>0&&<button onClick={()=>setOR(r=>({...r,[take.id]:!r[take.id]}))} style={{background:"transparent",border:"none",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT,padding:0}}>{take.replies.length} {take.replies.length===1?"reply":"replies"}</button>}
-<button onClick={()=>setRepO(r=>({...r,[take.id]:!r[take.id]}))} style={{marginLeft:"auto",background:"transparent",border:`1px solid ${BOR}`,borderRadius:5,padding:"3px 9px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>Debate</button>
+<button onClick={()=>vote(take,"agree")} title="Agree" style={{display:"flex",alignItems:"center",gap:3,background:c.mine==="agree"?"#4ADE8018":DIM,border:`1px solid ${c.mine==="agree"?"#4ADE8060":BOR}`,borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,fontWeight:700,color:"#4ADE80"}}><svg width={9} height={9} viewBox="0 0 24 24" fill="#4ADE80"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/></svg>{c.up}</button>
+<button onClick={()=>vote(take,"disagree")} title="Disagree" style={{display:"flex",alignItems:"center",gap:3,background:c.mine==="disagree"?`${ACC}18`:DIM,border:`1px solid ${c.mine==="disagree"?ACC+"60":BOR}`,borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,fontWeight:700,color:ACC}}><svg width={9} height={9} viewBox="0 0 24 24" fill={ACC}><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3H10z"/></svg>{c.dn}</button>
+{take.user_id===me.id&&<button onClick={()=>del(take)} style={{marginLeft:"auto",background:"transparent",border:`1px solid ${BOR}`,borderRadius:5,padding:"3px 9px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>Delete</button>}
 </div>
-{openR[take.id]&&take.replies.map(r=><div key={r.id} style={{padding:"7px 13px 7px 40px",borderTop:`1px solid ${BOR}`,background:BG}}><span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:TXT,fontWeight:700}}>@{r.u} </span><span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:"#C8C4E0"}}>{r.t}</span></div>)}
-{repO[take.id]&&<div style={{borderTop:`1px solid ${BOR}`,padding:"8px 13px",background:BG,display:"flex",gap:6}}><input value={repI[take.id]||""} onChange={e=>setRepI(r=>({...r,[take.id]:e.target.value}))} placeholder="Reply…" onKeyDown={e=>e.key==="Enter"&&reply(take.id)} style={{flex:1,background:SURF,border:`1px solid ${BOR}`,borderRadius:6,padding:"6px 9px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:12,outline:"none"}}/><button onClick={()=>reply(take.id)} style={{background:PRI,border:"none",borderRadius:6,padding:"6px 10px",color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:11,cursor:"pointer"}}>→</button></div>}
 </div>
 );
 })}
@@ -587,92 +632,136 @@ return(
 );
 }
 
-const FRIENDS_DATA=[
-{id:"u1",name:"Valeria M.",handle:"valeria_m",avatar:"VM",color:"#A78BFA",bio:"Cinema obsessive.",following:true,follower:true},
-{id:"u2",name:"Jordan K.",handle:"jkfilms",avatar:"JK",color:"#FF9B50",bio:"Games & film.",following:true,follower:true},
-{id:"u3",name:"Theo R.",handle:"theo_reads",avatar:"TR",color:"#00D4AA",bio:"Literary fiction.",following:false,follower:false},
-{id:"u4",name:"Priya S.",handle:"priyasounds",avatar:"PS",color:"#FF6BA8",bio:"Music nerd.",following:true,follower:true},
-];
-const FEED_DATA=[
-{id:1,userId:"u1",action:"rated",mediaTitle:"Dune: Part Two",mediaType:"film",rating:9.2,comment:"Villeneuve simply cannot miss.",time:"2h ago",likes:14},
-{id:2,userId:"u2",action:"completed",mediaTitle:"The Last of Us S2",mediaType:"series",rating:8.8,comment:"Episode 4 is some of the best TV I've seen.",time:"5h ago",likes:22},
-{id:3,userId:"u4",action:"rated",mediaTitle:"Brat",mediaType:"music",rating:9.0,comment:"Not just good pop — actually culturally important.",time:"8h ago",likes:41},
-{id:4,userId:"u2",action:"rated",mediaTitle:"Balatro",mediaType:"game",rating:9.8,comment:"LocalThunk is a genius.",time:"1d ago",likes:38},
-];
-function Friends(){
-const[following,setFollowing]=useState(["u1","u2","u4"]);const[followers]=useState(["u1","u2","u4"]);const[liked,setLiked]=useState([]);const[sub,setSub]=useState("feed");
-const mutuals=following.filter(id=>followers.includes(id));
-const feed=FEED_DATA.filter(a=>mutuals.includes(a.userId));
-const actionM={rated:{label:"rated",color:PRI},completed:{label:"completed",color:"#4ADE80"}};
+const SectionHead=({children,n})=><div style={{display:"flex",gap:6,alignItems:"center",margin:"14px 0 7px"}}><div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5}}>{children}</div>{n!=null&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>{n}</div>}</div>;
+const PersonRow=({p,mutual,children})=>(
+<div style={{background:SURF,border:`1px solid ${mutual?PRI+"40":BOR}`,borderRadius:11,padding:"13px 15px",display:"flex",alignItems:"center",gap:11,marginBottom:6}}>
+<Avatar p={p} size={42} ring={mutual}/>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,color:TXT}}>{p?.display_name||p?.handle}</div>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>@{p?.handle}</div>
+{p?.bio&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.bio}</div>}
+</div>
+<div style={{display:"flex",gap:5}}>{children}</div>
+</div>
+);
+
+// Friendships involving the current user, plus recent ratings from accepted friends.
+async function fetchSocial(meId){
+const{data:fs,error:e1}=await supabase.from("friendships").select(`id,status,created_at,requester,addressee,req:profiles!friendships_requester_fkey(${PROF_COLS}),adr:profiles!friendships_addressee_fkey(${PROF_COLS})`).order("created_at",{ascending:false});
+if(e1)return{error:e1};
+const ids=fs.filter(f=>f.status==="accepted").map(f=>f.requester===meId?f.addressee:f.requester);
+if(!ids.length)return{fs,rs:[]};
+const{data:rs,error:e2}=await supabase.from("ratings").select(`id,media_id,title,type,year,cover,credit,rating,comment,status,updated_at,user_id,profiles(${PROF_COLS})`).in("user_id",ids).order("updated_at",{ascending:false}).limit(50);
+if(e2)return{error:e2};
+return{fs,rs};
+}
+function Friends({me}){
+const[sub,setSub]=useState("feed");
+const[rels,setRels]=useState([]);const[feed,setFeed]=useState([]);
+const[loading,setLoading]=useState(true);const[err,setErr]=useState("");
+const[q,setQ]=useState("");const[found,setFound]=useState(null);const[msg,setMsg]=useState("");const[busy,setBusy]=useState(false);
+const applySocial=useCallback(({fs,rs,error})=>{if(error)setErr(error.message);else{setRels(fs);setFeed(rs);setErr("");}setLoading(false);},[]);
+const load=()=>fetchSocial(me.id).then(applySocial);
+useEffect(()=>{let live=true;fetchSocial(me.id).then(r=>{if(live)applySocial(r);});return()=>{live=false;};},[me.id,applySocial]);
+const other=f=>f.requester===me.id?f.adr:f.req;
+const incoming=rels.filter(f=>f.status==="pending"&&f.addressee===me.id);
+const sent=rels.filter(f=>f.status==="pending"&&f.requester===me.id);
+const friends=rels.filter(f=>f.status==="accepted");
+const act=async(fn,okMsg)=>{if(busy)return;setBusy(true);setMsg("");const{error}=await fn();setBusy(false);if(error){setMsg(error.code==="23505"?"There's already a request between you two.":error.message);return;}if(okMsg)setMsg(okMsg);await load();};
+const find=async()=>{
+const h=cleanHandle(q);setMsg("");
+if(!h){setFound(null);return;}
+const{data,error}=await supabase.from("profiles").select(PROF_COLS).eq("handle",h).maybeSingle();
+if(error){setMsg(error.message);return;}
+setFound(data||"none");
+};
+const relWith=id=>rels.find(f=>other(f)?.id===id);
+const send=p=>act(()=>supabase.from("friendships").insert({addressee:p.id}),`Request sent to @${p.handle}.`);
+const accept=f=>act(()=>supabase.from("friendships").update({status:"accepted"}).eq("id",f.id));
+const remove=(f,label)=>{if(label&&!window.confirm(label))return;act(()=>supabase.from("friendships").delete().eq("id",f.id));};
+const btn=(primary)=>({padding:"5px 13px",borderRadius:16,fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:10,cursor:busy?"wait":"pointer",border:`1px solid ${primary?PRI:BOR}`,background:primary?`${PRI}18`:DIM,color:primary?PRI:MUT,flexShrink:0});
 return(
 <div style={{maxWidth:540,margin:"0 auto",padding:"24px 0 80px"}}>
 <div style={{marginBottom:16}}>
 <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:10,fontWeight:700,letterSpacing:3,color:PRI,textTransform:"uppercase",marginBottom:5}}>Social</div>
 <h2 style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:22,color:TXT,margin:"0 0 4px"}}>Stacked with Friends</h2>
-<p style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,margin:0}}>Mutual follows only. Both must follow each other to share activity.</p>
+<p style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,margin:0}}>Invite-only. Friends see each other's ratings.</p>
 </div>
 <div style={{display:"flex",gap:0,marginBottom:18,background:DIM,borderRadius:8,padding:3,border:`1px solid ${BOR}`}}>
-{[["feed","Feed"],["people","People"]].map(([id,label])=>(
-<button key={id} onClick={()=>setSub(id)} style={{flex:1,padding:"7px 0",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:sub===id?700:500,fontSize:11,background:sub===id?SURF:"transparent",color:sub===id?TXT:MUT,border:`1px solid ${sub===id?BOR:"transparent"}`,cursor:"pointer"}}>{label}</button>
+{[["feed","Feed"],["people",`People${incoming.length?` · ${incoming.length}`:""}`]].map(([id,label])=>(
+<button key={id} onClick={()=>setSub(id)} style={{flex:1,padding:"7px 0",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:sub===id?700:500,fontSize:11,background:sub===id?SURF:"transparent",color:sub===id?TXT:id==="people"&&incoming.length?PRI:MUT,border:`1px solid ${sub===id?BOR:"transparent"}`,cursor:"pointer"}}>{label}</button>
 ))}
 </div>
-{sub==="feed"&&<div>
-<div style={{display:"flex",gap:9,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
-{FRIENDS_DATA.filter(u=>mutuals.includes(u.id)).map(u=>(
-<div key={u.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,flexShrink:0}}>
-<div style={{width:44,height:44,borderRadius:"50%",padding:2,background:`linear-gradient(135deg,${u.color},${PRI})`,boxSizing:"border-box"}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:12,color:u.color}}>{u.avatar}</div></div>
-<span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,color:MUT,maxWidth:44,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{u.name.split(" ")[0]}</span>
+{err&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:ACC,marginBottom:10}}>{err}</div>}
+{loading&&<div style={{textAlign:"center",padding:"40px 0",fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT}}>Loading…</div>}
+{!loading&&sub==="feed"&&<div>
+{friends.length>0&&<div style={{display:"flex",gap:9,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
+{friends.map(f=>{const p=other(f);return(
+<div key={f.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,flexShrink:0}}>
+<Avatar p={p} size={44} ring/>
+<span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,color:MUT,maxWidth:44,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(p?.display_name||p?.handle||"").split(" ")[0]}</span>
 </div>
-))}
-</div>
+);})}
+</div>}
+{!friends.length&&<div style={{textAlign:"center",padding:"40px 0"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,color:"#1C1D32",letterSpacing:1}}>NO FRIENDS YET</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:4}}>Find people by @handle in the <span onClick={()=>setSub("people")} style={{color:PRI,cursor:"pointer"}}>People</span> tab.</div></div>}
+{friends.length>0&&!feed.length&&<div style={{textAlign:"center",padding:"40px 0"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,color:"#1C1D32",letterSpacing:1}}>NOTHING HERE YET</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:4}}>Your friends haven't rated anything yet.</div></div>}
 <div style={{display:"flex",flexDirection:"column",gap:9}}>
-{feed.map(act=>{
-const user=FRIENDS_DATA.find(u=>u.id===act.userId);const meta=actionM[act.action]||actionM.rated;const isLiked=liked.includes(act.id);
-const[lb,col]=act.rating!=null?grade(act.rating):["",""];
+{feed.map(r=>{
+const p=r.profiles;const completed=r.status==="Completed";const rating=Number(r.rating);const[lb,col]=grade(rating);
 return(
-<div key={act.id} style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:11,overflow:"hidden"}}>
+<div key={r.id} style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:11,overflow:"hidden"}}>
 <div style={{padding:"11px 13px 0",display:"flex",alignItems:"center",gap:9}}>
-<div style={{width:34,height:34,borderRadius:"50%",padding:2,background:`linear-gradient(135deg,${user.color},${PRI})`,boxSizing:"border-box",flexShrink:0}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:10,color:user.color}}>{user.avatar}</div></div>
-<div style={{flex:1,minWidth:0}}><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><span style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT}}>{user.name}</span><span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:meta.color,fontWeight:600}}>{meta.label}</span></div><span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>{act.time}</span></div>
-{act.rating!=null&&<Pill value={act.rating}/>}
+<Avatar p={p} size={34} ring/>
+<div style={{flex:1,minWidth:0}}><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><span style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT}}>{p?.display_name||p?.handle}</span><span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:completed?"#4ADE80":PRI,fontWeight:600}}>{completed?"completed":"rated"}</span></div><span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>{ago(r.updated_at)}</span></div>
+<Pill value={rating}/>
 </div>
 <div style={{margin:"9px 13px",background:DIM,borderRadius:7,padding:"9px 11px",border:`1px solid ${BOR}`,display:"flex",gap:9,alignItems:"center"}}>
-<div style={{width:28,height:28,borderRadius:5,background:TC[act.mediaType]+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:8,fontWeight:800,color:TC[act.mediaType],textTransform:"uppercase"}}>{act.mediaType.slice(0,3)}</span></div>
-<div style={{flex:1,minWidth:0}}><div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{act.mediaTitle}</div>{lb&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:col,fontWeight:600}}>{lb}</div>}</div>
+<div style={{width:28,height:40,borderRadius:4,overflow:"hidden",flexShrink:0}}><CoverImg item={{title:r.title,type:r.type,cover:r.cover,credit:r.credit}} h={40} w={28} small/></div>
+<div style={{flex:1,minWidth:0}}><div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.title}</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}><span style={{color:TC[r.type],textTransform:"uppercase",fontWeight:700,fontSize:9,letterSpacing:1}}>{r.type}</span>{r.year?` · ${r.year}`:""}{lb&&<span style={{color:col,fontWeight:600}}> · {lb}</span>}</div></div>
 </div>
-{act.comment&&<div style={{margin:"0 13px 9px",fontFamily:"'Barlow',sans-serif",fontSize:12,color:"#B8B4D8",lineHeight:1.6}}>{act.comment}</div>}
+{r.comment&&<div style={{margin:"0 13px 9px",fontFamily:"'Barlow',sans-serif",fontSize:12,color:"#B8B4D8",lineHeight:1.6,overflowWrap:"anywhere"}}>{r.comment}</div>}
 <div style={{borderTop:`1px solid ${BOR}`,padding:"7px 13px",display:"flex",alignItems:"center",gap:12}}>
-<button onClick={()=>setLiked(l=>l.includes(act.id)?l.filter(x=>x!==act.id):[...l,act.id])} style={{background:"transparent",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontFamily:"'Barlow',sans-serif",fontSize:11,color:isLiked?ACC:MUT,fontWeight:isLiked?700:400,padding:0}}>
-<svg width={12} height={12} viewBox="0 0 24 24" fill={isLiked?ACC:"none"} stroke={isLiked?ACC:MUT} strokeWidth={2}><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-{act.likes+(isLiked?1:0)}
-</button>
-<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,marginLeft:"auto"}}>@{user.handle}</span>
+<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,marginLeft:"auto"}}>@{p?.handle}</span>
 </div>
 </div>
 );
 })}
 </div>
 </div>}
-{sub==="people"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
-<div style={{background:`${PRI}10`,border:`1px solid ${PRI}30`,borderRadius:8,padding:"9px 13px",marginBottom:6,display:"flex",gap:7,alignItems:"center"}}>
+{!loading&&sub==="people"&&<div>
+<div style={{background:`${PRI}10`,border:`1px solid ${PRI}30`,borderRadius:8,padding:"9px 13px",marginBottom:12,display:"flex",gap:7,alignItems:"center"}}>
 <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={PRI} strokeWidth={2}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx={9} cy={7} r={4}/></svg>
-<span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:PRI}}>Activity only visible when <strong>both users follow each other</strong>.</span>
+<span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:PRI}}>Invite-only: ratings are shared once <strong>both of you accept</strong>.</span>
 </div>
-{FRIENDS_DATA.map(user=>{
-const isF=following.includes(user.id);const isFr=followers.includes(user.id);const mutual=isF&&isFr;
+<div style={{display:"flex",gap:7}}>
+<input value={q} onChange={e=>{setQ(e.target.value);setFound(null);}} onKeyDown={e=>e.key==="Enter"&&find()} placeholder="Find by exact @handle" style={{flex:1,minWidth:0,background:SURF,border:`1px solid ${BOR}`,borderRadius:8,padding:"9px 12px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none"}}/>
+<button onClick={find} style={{background:PRI,border:"none",borderRadius:8,padding:"0 14px",color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,cursor:"pointer"}}>Find</button>
+</div>
+{msg&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:/^Request sent/.test(msg)?"#4ADE80":ACC,marginTop:7}}>{msg}</div>}
+{found==="none"&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:9}}>No one with that handle.</div>}
+{found&&found!=="none"&&<div style={{marginTop:9}}>{(()=>{
+if(found.id===me.id)return <PersonRow p={found}><span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>That's you</span></PersonRow>;
+const f=relWith(found.id);
 return(
-<div key={user.id} style={{background:SURF,border:`1px solid ${mutual?PRI+"40":BOR}`,borderRadius:11,padding:"13px 15px",display:"flex",alignItems:"center",gap:11}}>
-<div style={{width:42,height:42,borderRadius:"50%",padding:mutual?2:0,background:mutual?`linear-gradient(135deg,${user.color},${PRI})`:"transparent",boxSizing:"border-box",flexShrink:0}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:13,color:user.color,border:mutual?"none":`1.5px solid ${user.color}44`}}>{user.avatar}</div></div>
-<div style={{flex:1,minWidth:0}}>
-<div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,color:TXT}}>{user.name}</div>
-<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>@{user.handle}</div>
-<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB,marginTop:2}}>{user.bio}</div>
-{mutual&&<div style={{display:"inline-flex",alignItems:"center",gap:3,marginTop:3,background:PRI+"14",border:`1px solid ${PRI}30`,borderRadius:9,padding:"1px 7px"}}><svg width={7} height={7} viewBox="0 0 24 24" fill="none" stroke={PRI} strokeWidth={2.5} strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg><span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,fontWeight:700,color:PRI}}>MUTUAL</span></div>}
-</div>
-<button onClick={()=>setFollowing(f=>f.includes(user.id)?f.filter(x=>x!==user.id):[...f,user.id])} style={{padding:"5px 13px",borderRadius:16,fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:10,cursor:"pointer",border:`1px solid ${isF?BOR:PRI}`,background:isF?DIM:`${PRI}18`,color:isF?MUT:PRI,flexShrink:0}}>{isF?"Following":"Follow"}</button>
-</div>
+<PersonRow p={found} mutual={f?.status==="accepted"}>
+{!f&&<button disabled={busy} onClick={()=>send(found)} style={btn(true)}>Add friend</button>}
+{f?.status==="accepted"&&<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,fontWeight:700,color:PRI}}>FRIENDS</span>}
+{f?.status==="pending"&&f.requester===me.id&&<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>Requested</span>}
+{f?.status==="pending"&&f.addressee===me.id&&<><button disabled={busy} onClick={()=>accept(f)} style={btn(true)}>Accept</button><button disabled={busy} onClick={()=>remove(f)} style={btn(false)}>Decline</button></>}
+</PersonRow>
 );
-})}
+})()}</div>}
+{incoming.length>0&&<><SectionHead n={incoming.length}>Requests</SectionHead>{incoming.map(f=>(
+<PersonRow key={f.id} p={other(f)}><button disabled={busy} onClick={()=>accept(f)} style={btn(true)}>Accept</button><button disabled={busy} onClick={()=>remove(f)} style={btn(false)}>Decline</button></PersonRow>
+))}</>}
+<SectionHead n={friends.length}>Friends</SectionHead>
+{!friends.length&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT}}>No friends yet. Search for someone's @handle above.</div>}
+{friends.map(f=>{const p=other(f);return(
+<PersonRow key={f.id} p={p} mutual><button disabled={busy} onClick={()=>remove(f,`Remove @${p?.handle} as a friend?`)} style={btn(false)}>Remove</button></PersonRow>
+);})}
+{sent.length>0&&<><SectionHead n={sent.length}>Sent</SectionHead>{sent.map(f=>(
+<PersonRow key={f.id} p={other(f)}><button disabled={busy} onClick={()=>remove(f)} style={btn(false)}>Cancel</button></PersonRow>
+))}</>}
 </div>}
 </div>
 );
@@ -695,7 +784,12 @@ setUser({id:u.id,email:u.email,name:u.user_metadata?.name||"",handle:u.user_meta
 const{data,error}=await supabase.from("profiles").select("*").eq("id",u.id).maybeSingle();
 if(uid!==u.id)return;
 if(error){setLoadErr(`Couldn't load your profile: ${error.message}`);return;}
-if(data){setProf(fromRow(data));setSt("app");}else setSt("setup");
+if(!data){setSt("setup");return;}
+const{data:rs,error:re}=await supabase.from("ratings").select("*").eq("user_id",u.id).order("updated_at",{ascending:false});
+if(uid!==u.id)return;
+if(re){setLoadErr(`Couldn't load your ratings: ${re.message}`);return;}
+setLogged(Object.fromEntries(rs.map(r=>[r.media_id,ratingFromRow(r)])));
+setProf(fromRow(data));setSt("app");
 };
 // Session is persisted by supabase-js; INITIAL_SESSION fires on load with any stored session.
 const{data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{
@@ -709,7 +803,12 @@ setTimeout(()=>loadProfile(u),0);
 return()=>{uid=null;subscription.unsubscribe();};
 },[]);
 const logout=()=>supabase.auth.signOut();
-const onLog=item=>setLogged(prev=>({...prev,[item.id]:{...item}}));
+const onLog=async item=>{
+const row={user_id:prof.id,media_id:String(item.id).slice(0,200),title:(item.title||"Untitled").slice(0,300),type:item.type,year:item.year?String(item.year).slice(0,10):null,cover:item.cover&&item.cover.length<=1000?item.cover:null,credit:item.credit?item.credit.slice(0,300):null,rating:item.userRating,comment:item.comment||null,status:item.status||null};
+const{data,error}=await supabase.from("ratings").upsert(row,{onConflict:"user_id,media_id"}).select().single();
+if(error)throw new Error(error.message);
+setLogged(prev=>({...prev,[data.media_id]:{...ratingFromRow(data),overview:item.overview||"",tags:item.tags||[]}}));
+};
 const init=prof?(prof.displayName||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase():"";
 const TABS=[{id:"browse",lb:"Browse"},{id:"profile",lb:"My Profile"},{id:"friends",lb:"Friends"},{id:"takes",lb:"Hot Takes"}];
 const fonts=<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/>;
@@ -738,14 +837,14 @@ return(
 <div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px"}}>
 {tab==="browse"&&<Browse logged={logged} onLog={onLog} onOpen={setSel}/>}
 {tab==="profile"&&prof&&<MyProfile profile={prof} logged={logged} onEdit={()=>setSt("setup")}/>}
-{tab==="friends"&&<Friends/>}
-{tab==="takes"&&<Takes/>}
+{tab==="friends"&&prof&&<Friends me={prof}/>}
+{tab==="takes"&&prof&&<Takes me={prof}/>}
 </div>
 <button onClick={()=>setAgent(v=>!v)} style={{position:"fixed",bottom:22,right:22,width:48,height:48,borderRadius:"50%",background:`linear-gradient(135deg,${PRI},${ACC})`,border:"none",cursor:"pointer",boxShadow:`0 4px 20px ${PRI}50`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:600}}>
 {agent?<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>:<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round"><circle cx={12} cy={12} r={3}/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>}
 </button>
 {agent&&<Agent onClose={()=>setAgent(false)}/>}
-{sel&&<Modal item={sel} onClose={()=>setSel(null)} onLog={onLog}/>}
+{sel&&<Modal key={sel.id} item={sel} existing={logged[sel.id]} onClose={()=>setSel(null)} onLog={onLog}/>}
 </div>
 );
 }
