@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { supabase } from "./supabase";
 
 const BG="#07080F",SURF="#0D0E1C",BOR="#1C1D32",PRI="#6C63FF",ACC="#FF5C5C",TXT="#ECEAF8",MUT="#4A4A6E",DIM="#111222",SUB="#9896B8";
 const ANTHROPIC_KEY=import.meta.env.VITE_ANTHROPIC_KEY||"";
@@ -120,17 +121,36 @@ return(
 );
 }
 
-function Auth({onAuth}){
+const HANDLE_RE=/^[a-z0-9_]{3,20}$/;
+const cleanHandle=h=>h.toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,20);
+const BANNER_DEFAULT="linear-gradient(135deg,#1a1040,#6C63FF)";
+const fromRow=r=>({id:r.id,handle:r.handle,name:r.display_name,displayName:r.display_name,bio:r.bio||"",avatarColor:r.avatar_color||PRI,avatarEmoji:r.avatar_emoji||"",bannerCss:r.banner_css||BANNER_DEFAULT,top6:r.top6||{}});
+
+function Auth(){
 const[mode,setMode]=useState("login");
 const[f,setF]=useState({name:"",handle:"",email:"",pw:""});
 const[err,setErr]=useState("");
-const go=()=>{
+const[info,setInfo]=useState("");
+const[busy,setBusy]=useState(false);
+const go=async()=>{
+if(busy)return;
+setErr("");setInfo("");
 if(mode==="signup"){
 if(!f.name||!f.handle||!f.email||!f.pw){setErr("All fields required.");return;}
-onAuth({name:f.name,handle:f.handle.toLowerCase(),isNew:true});
+if(!HANDLE_RE.test(f.handle)){setErr("Username must be 3–20 letters, numbers or underscores.");return;}
+if(f.pw.length<6){setErr("Password must be at least 6 characters.");return;}
+setBusy(true);
+const{data,error}=await supabase.auth.signUp({email:f.email.trim(),password:f.pw,options:{data:{name:f.name.trim(),handle:f.handle}}});
+setBusy(false);
+if(error){setErr(error.message);return;}
+if(data.user&&data.user.identities?.length===0){setErr("An account with this email already exists. Log in instead.");return;}
+if(!data.session){setMode("login");setF(p=>({...p,pw:""}));setInfo("Check your email to confirm your account, then log in.");}
 }else{
 if(!f.email||!f.pw){setErr("Email and password required.");return;}
-onAuth({name:"Demo User",handle:"demo",isNew:false});
+setBusy(true);
+const{error}=await supabase.auth.signInWithPassword({email:f.email.trim(),password:f.pw});
+setBusy(false);
+if(error)setErr(error.message);
 }
 };
 const inp={width:"100%",background:DIM,border:`1px solid ${BOR}`,borderRadius:8,padding:"11px 14px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:10};
@@ -141,38 +161,62 @@ return(
 <div style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:16,padding:"22px 22px 18px"}}>
 <div style={{display:"flex",background:DIM,borderRadius:8,padding:3,marginBottom:18,border:`1px solid ${BOR}`}}>
 {[["login","Log In"],["signup","Sign Up"]].map(([id,lb])=>(
-<button key={id} onClick={()=>{setMode(id);setErr("");}} style={{flex:1,padding:"8px 0",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:mode===id?700:500,fontSize:13,background:mode===id?SURF:"transparent",color:mode===id?TXT:MUT,border:`1px solid ${mode===id?BOR:"transparent"}`,cursor:"pointer"}}>{lb}</button>
+<button key={id} onClick={()=>{setMode(id);setErr("");setInfo("");}} style={{flex:1,padding:"8px 0",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:mode===id?700:500,fontSize:13,background:mode===id?SURF:"transparent",color:mode===id?TXT:MUT,border:`1px solid ${mode===id?BOR:"transparent"}`,cursor:"pointer"}}>{lb}</button>
 ))}
 </div>
 {mode==="signup"&&<>
 <input placeholder="Full name" value={f.name} onChange={e=>setF({...f,name:e.target.value})} style={inp}/>
-<input placeholder="Username" value={f.handle} onChange={e=>setF({...f,handle:e.target.value.replace(/\s/g,"")})} style={inp}/>
+<input placeholder="Username" value={f.handle} onChange={e=>setF({...f,handle:cleanHandle(e.target.value)})} style={inp}/>
 </>}
-<input placeholder="Email" type="email" value={f.email} onChange={e=>setF({...f,email:e.target.value})} style={inp}/>
-<input placeholder="Password" type="password" value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&go()} style={{...inp,marginBottom:0}}/>
+<input placeholder="Email" type="email" autoComplete="email" value={f.email} onChange={e=>setF({...f,email:e.target.value})} style={inp}/>
+<input placeholder="Password" type="password" autoComplete={mode==="signup"?"new-password":"current-password"} value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&go()} style={{...inp,marginBottom:0}}/>
 {err&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:ACC,marginTop:8}}>{err}</div>}
-<button onClick={go} style={{width:"100%",padding:"12px",borderRadius:8,border:"none",background:PRI,color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer",marginTop:14}}>{mode==="signup"?"Create Account":"Log In"}</button>
+{info&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:"#4ADE80",marginTop:8}}>{info}</div>}
+<button onClick={go} disabled={busy} style={{width:"100%",padding:"12px",borderRadius:8,border:"none",background:PRI,color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:15,cursor:busy?"wait":"pointer",opacity:busy?0.7:1,marginTop:14}}>{busy?"…":mode==="signup"?"Create Account":"Log In"}</button>
 </div>
 </div>
 </div>
 );
 }
 
-function Setup({user,onDone}){
-const[ac,setAc]=useState(PRI);
-const[bid,setBid]=useState(0);
-const[dn,setDn]=useState(user.name||"");
-const[bio,setBio]=useState("");
-const BANS=["linear-gradient(135deg,#1a1040,#6C63FF)","linear-gradient(135deg,#1a0808,#FF5C5C)","linear-gradient(135deg,#041420,#5CB8FF)","linear-gradient(135deg,#041408,#00D4AA)","linear-gradient(135deg,#050510,#A78BFA)"];
+function Splash({msg,onLogout}){
+return(
+<div style={{minHeight:"100vh",background:BG,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14,padding:20}}>
+<Logo/>
+{msg?<div style={{fontFamily:"'Barlow',sans-serif",fontSize:13,color:ACC,maxWidth:380,textAlign:"center"}}>{msg}</div>:<div style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${PRI}`,borderTopColor:"transparent",animation:"spl 0.8s linear infinite"}}/>}
+<style>{`@keyframes spl{to{transform:rotate(360deg)}}`}</style>
+{onLogout&&<button onClick={onLogout} style={{background:"transparent",border:`1px solid ${BOR}`,color:MUT,padding:"6px 12px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:12,cursor:"pointer"}}>Log out</button>}
+</div>
+);
+}
+
+const BANS=[BANNER_DEFAULT,"linear-gradient(135deg,#1a0808,#FF5C5C)","linear-gradient(135deg,#041420,#5CB8FF)","linear-gradient(135deg,#041408,#00D4AA)","linear-gradient(135deg,#050510,#A78BFA)"];
+function Setup({user,initial,onDone,onCancel}){
+const[ac,setAc]=useState(initial?.avatarColor||PRI);
+const[bid,setBid]=useState(Math.max(0,BANS.indexOf(initial?.bannerCss)));
+const[dn,setDn]=useState(initial?.displayName||user.name||"");
+const[hd,setHd]=useState(initial?.handle||cleanHandle(user.handle||""));
+const[bio,setBio]=useState(initial?.bio||"");
 const COLS=[PRI,ACC,"#00D4AA","#FF9B50","#FF6BA8","#5CB8FF","#A78BFA"];
 const EMOS=["🎬","🎮","📚","🎵","🔥","⚡","🌊","🎯"];
-const[ae,setAe]=useState("");
+const[ae,setAe]=useState(initial?.avatarEmoji||"");
+const[err,setErr]=useState("");
+const[busy,setBusy]=useState(false);
 const initials=(dn||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
-const finish=()=>onDone({...user,displayName:dn||user.name,bio,avatarColor:ac,avatarEmoji:ae,bannerCss:BANS[bid],top6:{}});
+const finish=async()=>{
+if(busy)return;
+if(!HANDLE_RE.test(hd)){setErr("Username must be 3–20 letters, numbers or underscores.");return;}
+setErr("");setBusy(true);
+const row={id:user.id,handle:hd,display_name:(dn||user.name||hd).trim(),bio,avatar_color:ac,avatar_emoji:ae,banner_css:BANS[bid],top6:initial?.top6||{}};
+const{data,error}=await supabase.from("profiles").upsert(row).select().single();
+setBusy(false);
+if(error){setErr(error.code==="23505"?"That username is taken. Try another.":error.message);return;}
+onDone(fromRow(data));
+};
 return(
 <div style={{minHeight:"100vh",background:BG,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",padding:"36px 20px",overflowY:"auto"}}>
 <div style={{width:"100%",maxWidth:460}}>
-<div style={{textAlign:"center",marginBottom:20}}><Logo/><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:22,color:TXT,marginTop:12}}>Set up your profile</div></div>
+<div style={{textAlign:"center",marginBottom:20}}><Logo/><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:22,color:TXT,marginTop:12}}>{initial?"Edit your profile":"Set up your profile"}</div></div>
 <div style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:16,overflow:"hidden"}}>
 <div style={{height:90,background:BANS[bid],position:"relative"}}>
 <div style={{position:"absolute",bottom:-20,left:16}}>
@@ -181,7 +225,7 @@ return(
 </div>
 <div style={{padding:"28px 18px 18px"}}>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:13,color:TXT,fontWeight:700}}>{dn||"Your Name"}</div>
-<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT,marginBottom:16}}>@{user.handle}</div>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT,marginBottom:16}}>@{hd||"username"}</div>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:7}}>Banner</div>
 <div style={{display:"flex",gap:6,marginBottom:14}}>{BANS.map((b,i)=><div key={i} onClick={()=>setBid(i)} style={{width:42,height:24,borderRadius:5,background:b,cursor:"pointer",border:`2px solid ${bid===i?PRI:"transparent"}`}}/>)}</div>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:7}}>Color</div>
@@ -193,10 +237,16 @@ return(
 </div>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:7}}>Display Name</div>
 <input value={dn} onChange={e=>setDn(e.target.value)} style={{width:"100%",background:DIM,border:`1px solid ${BOR}`,borderRadius:7,padding:"9px 11px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:7}}>Username</div>
+<input value={hd} onChange={e=>setHd(cleanHandle(e.target.value))} style={{width:"100%",background:DIM,border:`1px solid ${BOR}`,borderRadius:7,padding:"9px 11px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:7}}>Bio <span style={{textTransform:"none",fontWeight:400}}>(optional)</span></div>
 <textarea value={bio} onChange={e=>setBio(e.target.value.slice(0,160))} placeholder="What are you into?" style={{width:"100%",background:DIM,border:`1px solid ${BOR}`,borderRadius:7,padding:"9px 11px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none",resize:"none",height:64,boxSizing:"border-box",marginBottom:4}}/>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textAlign:"right",marginBottom:14}}>{bio.length}/160</div>
-<button onClick={finish} style={{width:"100%",padding:"11px",borderRadius:8,border:"none",background:PRI,color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:14,cursor:"pointer"}}>Finish →</button>
+{err&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:ACC,marginBottom:10}}>{err}</div>}
+<div style={{display:"flex",gap:7}}>
+<button onClick={finish} disabled={busy} style={{flex:1,padding:"11px",borderRadius:8,border:"none",background:PRI,color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:14,cursor:busy?"wait":"pointer",opacity:busy?0.7:1}}>{busy?"Saving…":initial?"Save":"Finish →"}</button>
+{onCancel&&<button onClick={onCancel} style={{padding:"11px 14px",borderRadius:8,border:`1px solid ${BOR}`,background:"transparent",color:MUT,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancel</button>}
+</div>
 </div>
 </div>
 </div>
@@ -623,19 +673,43 @@ return(
 }
 
 export default function App(){
-const[st,setSt]=useState("auth");
+const[st,setSt]=useState("loading");
+const[loadErr,setLoadErr]=useState("");
 const[user,setUser]=useState(null);
 const[prof,setProf]=useState(null);
 const[tab,setTab]=useState("browse");
 const[sel,setSel]=useState(null);
 const[logged,setLogged]=useState({});
 const[agent,setAgent]=useState(false);
-const onAuth=u=>{setUser(u);if(u.isNew){setSt("setup");}else{setProf({...u,displayName:u.name,handle:u.handle||"demo",bio:"",avatarColor:PRI,avatarEmoji:"",bannerCss:"linear-gradient(135deg,#1a1040,#6C63FF)",top6:{}});setSt("app");}};
+useEffect(()=>{
+let uid=null;
+const loadProfile=async u=>{
+setLoadErr("");setSt("loading");
+setUser({id:u.id,email:u.email,name:u.user_metadata?.name||"",handle:u.user_metadata?.handle||""});
+const{data,error}=await supabase.from("profiles").select("*").eq("id",u.id).maybeSingle();
+if(uid!==u.id)return;
+if(error){setLoadErr(`Couldn't load your profile: ${error.message}`);return;}
+if(data){setProf(fromRow(data));setSt("app");}else setSt("setup");
+};
+// Session is persisted by supabase-js; INITIAL_SESSION fires on load with any stored session.
+const{data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{
+const u=session?.user;
+if(!u){uid=null;setUser(null);setProf(null);setLogged({});setTab("browse");setSel(null);setAgent(false);setLoadErr("");setSt("auth");return;}
+if(u.id===uid)return; // token refresh / user update for the same account
+uid=u.id;
+// Defer Supabase calls out of the auth callback to avoid deadlocking the auth lock.
+setTimeout(()=>loadProfile(u),0);
+});
+return()=>{uid=null;subscription.unsubscribe();};
+},[]);
+const logout=()=>supabase.auth.signOut();
 const onLog=item=>setLogged(prev=>({...prev,[item.id]:{...item}}));
 const init=prof?(prof.displayName||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase():"";
 const TABS=[{id:"browse",lb:"Browse"},{id:"profile",lb:"My Profile"},{id:"friends",lb:"Friends"},{id:"takes",lb:"Hot Takes"}];
-if(st==="auth")return(<><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/><Auth onAuth={onAuth}/></>);
-if(st==="setup")return(<><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/><Setup user={user} onDone={p=>{setProf(p);setSt("app");}}/></>);
+const fonts=<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/>;
+if(st==="loading")return(<>{fonts}<Splash msg={loadErr} onLogout={loadErr?logout:null}/></>);
+if(st==="auth")return(<>{fonts}<Auth/></>);
+if(st==="setup")return(<>{fonts}<Setup user={user} initial={prof} onDone={p=>{setProf(p);setSt("app");}} onCancel={prof?()=>setSt("app"):null}/></>);
 return(
 <div style={{minHeight:"100vh",background:BG}}>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/>
@@ -651,7 +725,7 @@ return(
 <div style={{width:20,height:20,borderRadius:"50%",background:prof?.avatarColor||PRI,display:"flex",alignItems:"center",justifyContent:"center",fontSize:prof?.avatarEmoji?10:7,fontWeight:800,color:"#fff"}}>{prof?.avatarEmoji||init}</div>
 <span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB}}>@{prof?.handle}</span>
 </div>
-<button onClick={()=>{setSt("auth");setUser(null);setProf(null);setLogged({});setTab("browse");}} style={{background:"transparent",border:`1px solid ${BOR}`,color:MUT,padding:"4px 9px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:11,cursor:"pointer"}}>Log out</button>
+<button onClick={logout} style={{background:"transparent",border:`1px solid ${BOR}`,color:MUT,padding:"4px 9px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:11,cursor:"pointer"}}>Log out</button>
 </div>
 </div>
 </header>
