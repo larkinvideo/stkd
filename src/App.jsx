@@ -520,3 +520,152 @@ return(
 </div>
 </div>
 ))}
+{loading&&<div style={{display:"flex",gap:7}}><div style={{width:20,height:20,borderRadius:5,background:`linear-gradient(135deg,${PRI},${ACC})`}}/><div style={{background:DIM,border:`1px solid ${BOR}`,borderRadius:"2px 9px 9px 9px",padding:"8px 11px",display:"flex",gap:3}}>{[0,1,2].map(d=><div key={d} style={{width:4,height:4,borderRadius:"50%",background:PRI,opacity:.7,animation:`bn 1s ${d*.15}s infinite`}}/>)}<style>{`@keyframes bn{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}`}</style></div></div>}
+<div ref={bot}/>
+</div>
+<div style={{borderTop:`1px solid ${BOR}`,padding:"8px 10px",display:"flex",gap:7}}>
+<input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()} placeholder="Ask about any media…" style={{flex:1,background:BG,border:`1px solid ${BOR}`,borderRadius:7,padding:"7px 10px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:12,outline:"none"}} onFocus={e=>e.target.style.borderColor=PRI+"60"} onBlur={e=>e.target.style.borderColor=BOR}/>
+<button onClick={send} disabled={!input.trim()||loading} style={{background:input.trim()&&!loading?PRI:DIM,border:"none",borderRadius:7,padding:"0 12px",color:input.trim()&&!loading?"#fff":MUT,cursor:input.trim()&&!loading?"pointer":"not-allowed",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,flexShrink:0}}>↑</button>
+</div>
+</div>
+);
+}
+
+const FRIENDS_DATA=[
+{id:"u1",name:"Valeria M.",handle:"valeria_m",avatar:"VM",color:"#A78BFA",bio:"Cinema obsessive.",following:true,follower:true},
+{id:"u2",name:"Jordan K.",handle:"jkfilms",avatar:"JK",color:"#FF9B50",bio:"Games & film.",following:true,follower:true},
+{id:"u3",name:"Theo R.",handle:"theo_reads",avatar:"TR",color:"#00D4AA",bio:"Literary fiction.",following:false,follower:false},
+{id:"u4",name:"Priya S.",handle:"priyasounds",avatar:"PS",color:"#FF6BA8",bio:"Music nerd.",following:true,follower:true},
+];
+const FEED_DATA=[
+{id:1,userId:"u1",action:"rated",mediaTitle:"Dune: Part Two",mediaType:"film",rating:9.2,comment:"Villeneuve simply cannot miss.",time:"2h ago",likes:14},
+{id:2,userId:"u2",action:"completed",mediaTitle:"The Last of Us S2",mediaType:"series",rating:8.8,comment:"Episode 4 is some of the best TV I've seen.",time:"5h ago",likes:22},
+{id:3,userId:"u4",action:"rated",mediaTitle:"Brat",mediaType:"music",rating:9.0,comment:"Not just good pop — actually culturally important.",time:"8h ago",likes:41},
+{id:4,userId:"u2",action:"rated",mediaTitle:"Balatro",mediaType:"game",rating:9.8,comment:"LocalThunk is a genius.",time:"1d ago",likes:38},
+];
+function Friends(){
+const[following,setFollowing]=useState(["u1","u2","u4"]);const[followers]=useState(["u1","u2","u4"]);const[liked,setLiked]=useState([]);const[sub,setSub]=useState("feed");
+const mutuals=following.filter(id=>followers.includes(id));
+const feed=FEED_DATA.filter(a=>mutuals.includes(a.userId));
+const actionM={rated:{label:"rated",color:PRI},completed:{label:"completed",color:"#4ADE80"}};
+return(
+<div style={{maxWidth:540,margin:"0 auto",padding:"24px 0 80px"}}>
+<div style={{marginBottom:16}}>
+<div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:10,fontWeight:700,letterSpacing:3,color:PRI,textTransform:"uppercase",marginBottom:5}}>Social</div>
+<h2 style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:22,color:TXT,margin:"0 0 4px"}}>Stacked with Friends</h2>
+<p style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,margin:0}}>Mutual follows only. Both must follow each other to share activity.</p>
+</div>
+<div style={{display:"flex",gap:0,marginBottom:18,background:DIM,borderRadius:8,padding:3,border:`1px solid ${BOR}`}}>
+{[["feed","Feed"],["people","People"]].map(([id,label])=>(
+<button key={id} onClick={()=>setSub(id)} style={{flex:1,padding:"7px 0",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:sub===id?700:500,fontSize:11,background:sub===id?SURF:"transparent",color:sub===id?TXT:MUT,border:`1px solid ${sub===id?BOR:"transparent"}`,cursor:"pointer"}}>{label}</button>
+))}
+</div>
+{sub==="feed"&&<div>
+<div style={{display:"flex",gap:9,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
+{FRIENDS_DATA.filter(u=>mutuals.includes(u.id)).map(u=>(
+<div key={u.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,flexShrink:0}}>
+<div style={{width:44,height:44,borderRadius:"50%",padding:2,background:`linear-gradient(135deg,${u.color},${PRI})`,boxSizing:"border-box"}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:12,color:u.color}}>{u.avatar}</div></div>
+<span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,color:MUT,maxWidth:44,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{u.name.split(" ")[0]}</span>
+</div>
+))}
+</div>
+<div style={{display:"flex",flexDirection:"column",gap:9}}>
+{feed.map(act=>{
+const user=FRIENDS_DATA.find(u=>u.id===act.userId);const meta=actionM[act.action]||actionM.rated;const isLiked=liked.includes(act.id);
+const[lb,col]=act.rating!=null?grade(act.rating):["",""];
+return(
+<div key={act.id} style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:11,overflow:"hidden"}}>
+<div style={{padding:"11px 13px 0",display:"flex",alignItems:"center",gap:9}}>
+<div style={{width:34,height:34,borderRadius:"50%",padding:2,background:`linear-gradient(135deg,${user.color},${PRI})`,boxSizing:"border-box",flexShrink:0}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:10,color:user.color}}>{user.avatar}</div></div>
+<div style={{flex:1,minWidth:0}}><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><span style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT}}>{user.name}</span><span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:meta.color,fontWeight:600}}>{meta.label}</span></div><span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>{act.time}</span></div>
+{act.rating!=null&&<Pill value={act.rating}/>}
+</div>
+<div style={{margin:"9px 13px",background:DIM,borderRadius:7,padding:"9px 11px",border:`1px solid ${BOR}`,display:"flex",gap:9,alignItems:"center"}}>
+<div style={{width:28,height:28,borderRadius:5,background:TC[act.mediaType]+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:8,fontWeight:800,color:TC[act.mediaType],textTransform:"uppercase"}}>{act.mediaType.slice(0,3)}</span></div>
+<div style={{flex:1,minWidth:0}}><div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{act.mediaTitle}</div>{lb&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:col,fontWeight:600}}>{lb}</div>}</div>
+</div>
+{act.comment&&<div style={{margin:"0 13px 9px",fontFamily:"'Barlow',sans-serif",fontSize:12,color:"#B8B4D8",lineHeight:1.6}}>{act.comment}</div>}
+<div style={{borderTop:`1px solid ${BOR}`,padding:"7px 13px",display:"flex",alignItems:"center",gap:12}}>
+<button onClick={()=>setLiked(l=>l.includes(act.id)?l.filter(x=>x!==act.id):[...l,act.id])} style={{background:"transparent",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontFamily:"'Barlow',sans-serif",fontSize:11,color:isLiked?ACC:MUT,fontWeight:isLiked?700:400,padding:0}}>
+<svg width={12} height={12} viewBox="0 0 24 24" fill={isLiked?ACC:"none"} stroke={isLiked?ACC:MUT} strokeWidth={2}><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+{act.likes+(isLiked?1:0)}
+</button>
+<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,marginLeft:"auto"}}>@{user.handle}</span>
+</div>
+</div>
+);
+})}
+</div>
+</div>}
+{sub==="people"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+<div style={{background:`${PRI}10`,border:`1px solid ${PRI}30`,borderRadius:8,padding:"9px 13px",marginBottom:6,display:"flex",gap:7,alignItems:"center"}}>
+<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={PRI} strokeWidth={2}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx={9} cy={7} r={4}/></svg>
+<span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:PRI}}>Activity only visible when <strong>both users follow each other</strong>.</span>
+</div>
+{FRIENDS_DATA.map(user=>{
+const isF=following.includes(user.id);const isFr=followers.includes(user.id);const mutual=isF&&isFr;
+return(
+<div key={user.id} style={{background:SURF,border:`1px solid ${mutual?PRI+"40":BOR}`,borderRadius:11,padding:"13px 15px",display:"flex",alignItems:"center",gap:11}}>
+<div style={{width:42,height:42,borderRadius:"50%",padding:mutual?2:0,background:mutual?`linear-gradient(135deg,${user.color},${PRI})`:"transparent",boxSizing:"border-box",flexShrink:0}}><div style={{width:"100%",height:"100%",borderRadius:"50%",background:SURF,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:13,color:user.color,border:mutual?"none":`1.5px solid ${user.color}44`}}>{user.avatar}</div></div>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:13,color:TXT}}>{user.name}</div>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>@{user.handle}</div>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB,marginTop:2}}>{user.bio}</div>
+{mutual&&<div style={{display:"inline-flex",alignItems:"center",gap:3,marginTop:3,background:PRI+"14",border:`1px solid ${PRI}30`,borderRadius:9,padding:"1px 7px"}}><svg width={7} height={7} viewBox="0 0 24 24" fill="none" stroke={PRI} strokeWidth={2.5} strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg><span style={{fontFamily:"'Barlow',sans-serif",fontSize:9,fontWeight:700,color:PRI}}>MUTUAL</span></div>}
+</div>
+<button onClick={()=>setFollowing(f=>f.includes(user.id)?f.filter(x=>x!==user.id):[...f,user.id])} style={{padding:"5px 13px",borderRadius:16,fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:10,cursor:"pointer",border:`1px solid ${isF?BOR:PRI}`,background:isF?DIM:`${PRI}18`,color:isF?MUT:PRI,flexShrink:0}}>{isF?"Following":"Follow"}</button>
+</div>
+);
+})}
+</div>}
+</div>
+);
+}
+
+export default function App(){
+const[st,setSt]=useState("auth");
+const[user,setUser]=useState(null);
+const[prof,setProf]=useState(null);
+const[tab,setTab]=useState("browse");
+const[sel,setSel]=useState(null);
+const[logged,setLogged]=useState({});
+const[agent,setAgent]=useState(false);
+const onAuth=u=>{setUser(u);if(u.isNew){setSt("setup");}else{setProf({...u,displayName:u.name,handle:u.handle||"demo",bio:"",avatarColor:PRI,avatarEmoji:"",bannerCss:"linear-gradient(135deg,#1a1040,#6C63FF)",top6:{}});setSt("app");}};
+const onLog=item=>setLogged(prev=>({...prev,[item.id]:{...item}}));
+const init=prof?(prof.displayName||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase():"";
+const TABS=[{id:"browse",lb:"Browse"},{id:"profile",lb:"My Profile"},{id:"friends",lb:"Friends"},{id:"takes",lb:"Hot Takes"}];
+if(st==="auth")return(<><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/><Auth onAuth={onAuth}/></>);
+if(st==="setup")return(<><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/><Setup user={user} onDone={p=>{setProf(p);setSt("app");}}/></>);
+return(
+<div style={{minHeight:"100vh",background:BG}}>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/>
+<style>{`*{box-sizing:border-box}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#2E3058;border-radius:2px}`}</style>
+<header style={{position:"sticky",top:0,zIndex:100,background:`${BG}F8`,backdropFilter:"blur(20px)",borderBottom:`1px solid ${BOR}`}}>
+<div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px",height:52,display:"flex",alignItems:"center",gap:14}}>
+<Logo/>
+<div style={{display:"flex",gap:2}}>
+{TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 11px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:tab===t.id?700:500,fontSize:12,background:tab===t.id?DIM:"transparent",color:tab===t.id?TXT:MUT,border:tab===t.id?`1px solid ${BOR}`:"1px solid transparent",cursor:"pointer"}}>{t.lb}</button>)}
+</div>
+<div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}}>
+<div onClick={()=>setTab("profile")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:14,border:`1px solid ${BOR}`,background:SURF}}>
+<div style={{width:20,height:20,borderRadius:"50%",background:prof?.avatarColor||PRI,display:"flex",alignItems:"center",justifyContent:"center",fontSize:prof?.avatarEmoji?10:7,fontWeight:800,color:"#fff"}}>{prof?.avatarEmoji||init}</div>
+<span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB}}>@{prof?.handle}</span>
+</div>
+<button onClick={()=>{setSt("auth");setUser(null);setProf(null);setLogged({});setTab("browse");}} style={{background:"transparent",border:`1px solid ${BOR}`,color:MUT,padding:"4px 9px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:11,cursor:"pointer"}}>Log out</button>
+</div>
+</div>
+</header>
+<div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px"}}>
+{tab==="browse"&&<Browse logged={logged} onLog={onLog} onOpen={setSel}/>}
+{tab==="profile"&&prof&&<MyProfile profile={prof} logged={logged} onEdit={()=>setSt("setup")}/>}
+{tab==="friends"&&<Friends/>}
+{tab==="takes"&&<Takes/>}
+</div>
+<button onClick={()=>setAgent(v=>!v)} style={{position:"fixed",bottom:22,right:22,width:48,height:48,borderRadius:"50%",background:`linear-gradient(135deg,${PRI},${ACC})`,border:"none",cursor:"pointer",boxShadow:`0 4px 20px ${PRI}50`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:600}}>
+{agent?<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>:<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round"><circle cx={12} cy={12} r={3}/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>}
+</button>
+{agent&&<Agent onClose={()=>setAgent(false)}/>}
+{sel&&<Modal item={sel} onClose={()=>setSel(null)} onLog={onLog}/>}
+</div>
+);
+}
