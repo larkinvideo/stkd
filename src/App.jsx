@@ -655,12 +655,12 @@ const{data:rs,error:e2}=await supabase.from("ratings").select(`id,media_id,title
 if(e2)return{error:e2};
 return{fs,rs};
 }
-function Friends({me}){
-const[sub,setSub]=useState("feed");
+function Friends({me,invite,onInviteUsed}){
+const[sub,setSub]=useState(invite?"people":"feed");
 const[rels,setRels]=useState([]);const[feed,setFeed]=useState([]);
 const[loading,setLoading]=useState(true);const[err,setErr]=useState("");
-const[q,setQ]=useState("");const[found,setFound]=useState(null);const[msg,setMsg]=useState("");const[busy,setBusy]=useState(false);
-const applySocial=useCallback(({fs,rs,error})=>{if(error)setErr(error.message);else{setRels(fs);setFeed(rs);setErr("");}setLoading(false);},[]);
+const[q,setQ]=useState(invite||"");const[results,setResults]=useState(null);const[copied,setCopied]=useState(false);const[msg,setMsg]=useState("");const[busy,setBusy]=useState(false);
+const applySocial=useCallback(({fs,rs,error})=>{if(error)setErr(error.message);else{setRels(fs);setFeed(rs);setErr("");if(!fs.some(f=>f.status==="accepted"))setSub("people");}setLoading(false);},[]);
 const load=()=>fetchSocial(me.id).then(applySocial);
 useEffect(()=>{let live=true;fetchSocial(me.id).then(r=>{if(live)applySocial(r);});return()=>{live=false;};},[me.id,applySocial]);
 const other=f=>f.requester===me.id?f.adr:f.req;
@@ -668,12 +668,26 @@ const incoming=rels.filter(f=>f.status==="pending"&&f.addressee===me.id);
 const sent=rels.filter(f=>f.status==="pending"&&f.requester===me.id);
 const friends=rels.filter(f=>f.status==="accepted");
 const act=async(fn,okMsg)=>{if(busy)return;setBusy(true);setMsg("");const{error}=await fn();setBusy(false);if(error){setMsg(error.code==="23505"?"There's already a request between you two.":error.message);return;}if(okMsg)setMsg(okMsg);await load();};
-const find=async()=>{
-const h=cleanHandle(q);setMsg("");
-if(!h){setFound(null);return;}
-const{data,error}=await supabase.from("profiles").select(PROF_COLS).eq("handle",h).maybeSingle();
+// Live search as you type: handle prefix or display-name match.
+const qh=cleanHandle(q.replace(/^@/,""));
+useEffect(()=>{
+const h=qh;
+if(h.length<2)return;
+let live=true;
+const t=setTimeout(async()=>{
+const{data,error}=await supabase.from("profiles").select(PROF_COLS).or(`handle.ilike.${h}%,display_name.ilike.%${h}%`).neq("id",me.id).order("handle").limit(8);
+if(!live)return;
 if(error){setMsg(error.message);return;}
-setFound(data||"none");
+setResults(data);
+if(invite){onInviteUsed?.();}
+},250);
+return()=>{live=false;clearTimeout(t);};
+},[qh,me.id,invite,onInviteUsed]);
+const inviteUrl=`${window.location.origin}/?add=${me.handle}`;
+const shareInvite=async()=>{
+const text=`Add me on STKD — I'm @${me.handle}`;
+try{if(navigator.share){await navigator.share({title:"STKD",text,url:inviteUrl});return;}}catch{return;}
+try{await navigator.clipboard.writeText(inviteUrl);setCopied(true);setTimeout(()=>setCopied(false),2000);}catch{setMsg(inviteUrl);}
 };
 const relWith=id=>rels.find(f=>other(f)?.id===id);
 const send=p=>act(()=>supabase.from("friendships").insert({addressee:p.id}),`Request sent to @${p.handle}.`);
@@ -703,7 +717,7 @@ return(
 </div>
 );})}
 </div>}
-{!friends.length&&<div style={{textAlign:"center",padding:"40px 0"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,color:"#1C1D32",letterSpacing:1}}>NO FRIENDS YET</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:4}}>Find people by @handle in the <span onClick={()=>setSub("people")} style={{color:PRI,cursor:"pointer"}}>People</span> tab.</div></div>}
+{!friends.length&&<div style={{textAlign:"center",padding:"40px 0"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,color:"#1C1D32",letterSpacing:1}}>NO FRIENDS YET</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:4}}>Search or share your invite link in the <span onClick={()=>setSub("people")} style={{color:PRI,cursor:"pointer"}}>People</span> tab.</div></div>}
 {friends.length>0&&!feed.length&&<div style={{textAlign:"center",padding:"40px 0"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,color:"#1C1D32",letterSpacing:1}}>NOTHING HERE YET</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:4}}>Your friends haven't rated anything yet.</div></div>}
 <div style={{display:"flex",flexDirection:"column",gap:9}}>
 {feed.map(r=>{
@@ -733,29 +747,31 @@ return(
 <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={PRI} strokeWidth={2}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx={9} cy={7} r={4}/></svg>
 <span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:PRI}}>Invite-only: ratings are shared once <strong>both of you accept</strong>.</span>
 </div>
-<div style={{display:"flex",gap:7}}>
-<input value={q} onChange={e=>{setQ(e.target.value);setFound(null);}} onKeyDown={e=>e.key==="Enter"&&find()} placeholder="Find by exact @handle" style={{flex:1,minWidth:0,background:SURF,border:`1px solid ${BOR}`,borderRadius:8,padding:"9px 12px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none"}}/>
-<button onClick={find} style={{background:PRI,border:"none",borderRadius:8,padding:"0 14px",color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,cursor:"pointer"}}>Find</button>
+<div style={{background:SURF,border:`1px solid ${BOR}`,borderRadius:10,padding:"11px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:12,color:TXT}}>Invite a friend</div>
+<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{inviteUrl.replace(/^https?:\/\//,"")}</div>
 </div>
+<button onClick={shareInvite} style={btn(true)}>{copied?"Copied!":"Share link"}</button>
+</div>
+<input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by @handle or name" style={{width:"100%",background:SURF,border:`1px solid ${BOR}`,borderRadius:8,padding:"9px 12px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none"}}/>
 {msg&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:/^Request sent/.test(msg)?"#4ADE80":ACC,marginTop:7}}>{msg}</div>}
-{found==="none"&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:9}}>No one with that handle.</div>}
-{found&&found!=="none"&&<div style={{marginTop:9}}>{(()=>{
-if(found.id===me.id)return <PersonRow p={found}><span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>That's you</span></PersonRow>;
-const f=relWith(found.id);
+{qh.length>=2&&results&&!results.length&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:9}}>No one found. Send them your invite link instead.</div>}
+{qh.length>=2&&results&&results.length>0&&<div style={{marginTop:9,display:"flex",flexDirection:"column",gap:6}}>{results.map(p=>{
+const f=relWith(p.id);
 return(
-<PersonRow p={found} mutual={f?.status==="accepted"}>
-{!f&&<button disabled={busy} onClick={()=>send(found)} style={btn(true)}>Add friend</button>}
+<PersonRow key={p.id} p={p} mutual={f?.status==="accepted"}>
+{!f&&<button disabled={busy} onClick={()=>send(p)} style={btn(true)}>Add friend</button>}
 {f?.status==="accepted"&&<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,fontWeight:700,color:PRI}}>FRIENDS</span>}
 {f?.status==="pending"&&f.requester===me.id&&<span style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>Requested</span>}
 {f?.status==="pending"&&f.addressee===me.id&&<><button disabled={busy} onClick={()=>accept(f)} style={btn(true)}>Accept</button><button disabled={busy} onClick={()=>remove(f)} style={btn(false)}>Decline</button></>}
 </PersonRow>
-);
-})()}</div>}
+);})}</div>}
 {incoming.length>0&&<><SectionHead n={incoming.length}>Requests</SectionHead>{incoming.map(f=>(
 <PersonRow key={f.id} p={other(f)}><button disabled={busy} onClick={()=>accept(f)} style={btn(true)}>Accept</button><button disabled={busy} onClick={()=>remove(f)} style={btn(false)}>Decline</button></PersonRow>
 ))}</>}
 <SectionHead n={friends.length}>Friends</SectionHead>
-{!friends.length&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT}}>No friends yet. Search for someone's @handle above.</div>}
+{!friends.length&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT}}>No friends yet. Search above or share your invite link.</div>}
 {friends.map(f=>{const p=other(f);return(
 <PersonRow key={f.id} p={p} mutual><button disabled={busy} onClick={()=>remove(f,`Remove @${p?.handle} as a friend?`)} style={btn(false)}>Remove</button></PersonRow>
 );})}
@@ -776,6 +792,17 @@ const[tab,setTab]=useState("browse");
 const[sel,setSel]=useState(null);
 const[logged,setLogged]=useState({});
 const[agent,setAgent]=useState(false);
+// Invite links look like stkdapp.com/?add=handle. Keep it through sign-up/login.
+const[invite,setInvite]=useState(()=>{try{const h=cleanHandle(new URLSearchParams(window.location.search).get("add")||"");if(h){localStorage.setItem("stkd_invite",h);window.history.replaceState(null,"",window.location.pathname);}return localStorage.getItem("stkd_invite")||"";}catch{return "";}});
+const clearInvite=useCallback(()=>{try{localStorage.removeItem("stkd_invite");}catch{/* ignore */}setInvite("");setTab("friends");},[]);
+const curTab=invite?"friends":tab;
+const[reqCount,setReqCount]=useState(0);
+useEffect(()=>{
+if(!prof?.id)return;
+let live=true;
+supabase.from("friendships").select("id",{count:"exact",head:true}).eq("addressee",prof.id).eq("status","pending").then(({count})=>{if(live)setReqCount(count||0);});
+return()=>{live=false;};
+},[prof?.id,curTab]);
 useEffect(()=>{
 let uid=null;
 const loadProfile=async u=>{
@@ -823,7 +850,7 @@ return(
 <div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px",height:52,display:"flex",alignItems:"center",gap:14}}>
 <Logo/>
 <div style={{display:"flex",gap:2}}>
-{TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 11px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:tab===t.id?700:500,fontSize:12,background:tab===t.id?DIM:"transparent",color:tab===t.id?TXT:MUT,border:tab===t.id?`1px solid ${BOR}`:"1px solid transparent",cursor:"pointer"}}>{t.lb}</button>)}
+{TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 11px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:curTab===t.id?700:500,fontSize:12,background:curTab===t.id?DIM:"transparent",color:curTab===t.id?TXT:MUT,border:curTab===t.id?`1px solid ${BOR}`:"1px solid transparent",cursor:"pointer",position:"relative"}}>{t.lb}{t.id==="friends"&&reqCount>0&&<span style={{marginLeft:5,background:ACC,color:"#fff",borderRadius:8,padding:"0 5px",fontSize:9,fontWeight:800}}>{reqCount}</span>}</button>)}
 </div>
 <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}}>
 <div onClick={()=>setTab("profile")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:14,border:`1px solid ${BOR}`,background:SURF}}>
@@ -835,10 +862,10 @@ return(
 </div>
 </header>
 <div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px"}}>
-{tab==="browse"&&<Browse logged={logged} onLog={onLog} onOpen={setSel}/>}
-{tab==="profile"&&prof&&<MyProfile profile={prof} logged={logged} onEdit={()=>setSt("setup")}/>}
-{tab==="friends"&&prof&&<Friends me={prof}/>}
-{tab==="takes"&&prof&&<Takes me={prof}/>}
+{curTab==="browse"&&<Browse logged={logged} onLog={onLog} onOpen={setSel}/>}
+{curTab==="profile"&&prof&&<MyProfile profile={prof} logged={logged} onEdit={()=>setSt("setup")}/>}
+{curTab==="friends"&&prof&&<Friends me={prof} invite={invite} onInviteUsed={clearInvite}/>}
+{curTab==="takes"&&prof&&<Takes me={prof}/>}
 </div>
 <button onClick={()=>setAgent(v=>!v)} style={{position:"fixed",bottom:22,right:22,width:48,height:48,borderRadius:"50%",background:`linear-gradient(135deg,${PRI},${ACC})`,border:"none",cursor:"pointer",boxShadow:`0 4px 20px ${PRI}50`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:600}}>
 {agent?<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>:<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round"><circle cx={12} cy={12} r={3}/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>}
