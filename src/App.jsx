@@ -162,7 +162,7 @@ setErr("");setInfo("");
 if(mode==="signup"){
 if(!f.name||!f.handle||!f.email||!f.pw){setErr("All fields required.");return;}
 if(!HANDLE_RE.test(f.handle)){setErr("Username must be 3–20 letters, numbers or underscores.");return;}
-if(f.pw.length<6){setErr("Password must be at least 6 characters.");return;}
+if(f.pw.length<8){setErr("Password must be at least 8 characters.");return;}
 setBusy(true);
 const{data,error}=await supabase.auth.signUp({email:f.email.trim(),password:f.pw,options:{data:{name:f.name.trim(),handle:f.handle}}});
 setBusy(false);
@@ -232,7 +232,7 @@ if(busy)return;
 if(!HANDLE_RE.test(hd)){setErr("Username must be 3–20 letters, numbers or underscores.");return;}
 if(hasProfanity(hd,dn,bio)){setErr(FAMILY_MSG);return;}
 setErr("");setBusy(true);
-const row={id:user.id,handle:hd,display_name:(dn||user.name||hd).trim(),bio,avatar_color:ac,avatar_emoji:ae,banner_css:BANS[bid],top6:initial?.top6||{}};
+const row={id:user.id,handle:hd,display_name:(dn||user.name||hd).trim().slice(0,40),bio,avatar_color:ac,avatar_emoji:ae,banner_css:BANS[bid],top6:initial?.top6||{}};
 const{data,error}=await supabase.from("profiles").upsert(row).select().single();
 setBusy(false);
 if(error){setErr(error.code==="23505"?"That username is taken. Try another.":isProfanityError(error)?FAMILY_MSG:error.message);return;}
@@ -261,7 +261,7 @@ return(
 {EMOS.map(e=><div key={e} onClick={()=>setAe(e)} style={{width:28,height:28,borderRadius:6,background:DIM,border:`1px solid ${ae===e?PRI:BOR}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{e}</div>)}
 </div>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:7}}>Display Name</div>
-<input value={dn} onChange={e=>setDn(e.target.value)} style={{width:"100%",background:DIM,border:`1px solid ${BOR}`,borderRadius:7,padding:"9px 11px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+<input value={dn} maxLength={40} onChange={e=>setDn(e.target.value)} style={{width:"100%",background:DIM,border:`1px solid ${BOR}`,borderRadius:7,padding:"9px 11px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:7}}>Username</div>
 <input value={hd} onChange={e=>setHd(cleanHandle(e.target.value))} style={{width:"100%",background:DIM,border:`1px solid ${BOR}`,borderRadius:7,padding:"9px 11px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
 <div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700,marginBottom:7}}>Bio <span style={{textTransform:"none",fontWeight:400}}>(optional)</span></div>
@@ -668,7 +668,7 @@ const other=f=>f.requester===me.id?f.adr:f.req;
 const incoming=rels.filter(f=>f.status==="pending"&&f.addressee===me.id);
 const sent=rels.filter(f=>f.status==="pending"&&f.requester===me.id);
 const friends=rels.filter(f=>f.status==="accepted");
-const act=async(fn,okMsg)=>{if(busy)return;setBusy(true);setMsg("");const{error}=await fn();setBusy(false);if(error){setMsg(error.code==="23505"?"There's already a request between you two.":error.message);return;}if(okMsg)setMsg(okMsg);await load();};
+const act=async(fn,okMsg)=>{if(busy)return;setBusy(true);setMsg("");const{error}=await fn();setBusy(false);if(error){setMsg(error.code==="23505"?"There's already a request between you two.":/STKD_TOO_MANY/.test(error.message)?"You've sent a lot of requests. Wait for some to be accepted first.":error.message);return;}if(okMsg)setMsg(okMsg);await load();};
 // Live search as you type: handle prefix or display-name match.
 const qh=cleanHandle(q.replace(/^@/,""));
 useEffect(()=>{
