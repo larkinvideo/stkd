@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
+import { hasProfanity, FAMILY_MSG, isProfanityError } from "./profanity";
 
 const BG="#07080F",SURF="#0D0E1C",BOR="#1C1D32",PRI="#6C63FF",ACC="#FF5C5C",TXT="#ECEAF8",MUT="#4A4A6E",DIM="#111222",SUB="#9896B8";
 // Calls the /api/chat proxy with the current Supabase session token. Throws on non-2xx.
@@ -29,7 +30,6 @@ return["Worthless","#991B1B"];
 
 function useDb(v,ms){const[d,setD]=useState(v);useEffect(()=>{const t=setTimeout(()=>setD(v),ms);return()=>clearTimeout(t);},[v,ms]);return d;}
 
-const isSafe=t=>!/\b(f+u+c+k+|sh[i1]t|b[i1]tch|c[o0]ck|d[i1]ck|p[o0]rn|nude|kys|rape|n[i1]gg[ae]r?|f[a4@]g+[o0]t|c[u0]nt)\b/i.test(t);
 
 async function doSearch(q,type){
 const TK="38de5f986a8f2d5419b9b41d47deeb75",RK="2e43cb91529d4758980e0041518dbced";
@@ -230,11 +230,12 @@ const initials=(dn||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase
 const finish=async()=>{
 if(busy)return;
 if(!HANDLE_RE.test(hd)){setErr("Username must be 3–20 letters, numbers or underscores.");return;}
+if(hasProfanity(hd,dn,bio)){setErr(FAMILY_MSG);return;}
 setErr("");setBusy(true);
 const row={id:user.id,handle:hd,display_name:(dn||user.name||hd).trim(),bio,avatar_color:ac,avatar_emoji:ae,banner_css:BANS[bid],top6:initial?.top6||{}};
 const{data,error}=await supabase.from("profiles").upsert(row).select().single();
 setBusy(false);
-if(error){setErr(error.code==="23505"?"That username is taken. Try another.":error.message);return;}
+if(error){setErr(error.code==="23505"?"That username is taken. Try another.":isProfanityError(error)?FAMILY_MSG:error.message);return;}
 onDone(fromRow(data));
 };
 return(
@@ -308,7 +309,7 @@ const[busy,setBusy]=useState(false);
 const[err,setErr]=useState("");
 const tc=TC[item.type];
 const[lb,col]=grade(rat);
-const go=async()=>{if(busy)return;setBusy(true);setErr("");try{await onLog({...item,userRating:rat,status:st,comment:rev.trim()});setDone(true);}catch(e){setErr(e.message||"Couldn't save your rating.");}setBusy(false);};
+const go=async()=>{if(busy)return;if(hasProfanity(rev)){setErr(FAMILY_MSG);return;}setBusy(true);setErr("");try{await onLog({...item,userRating:rat,status:st,comment:rev.trim()});setDone(true);}catch(e){setErr(e.message||"Couldn't save your rating.");}setBusy(false);};
 return(
 <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(7,8,15,0.93)",backdropFilter:"blur(16px)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1000,padding:20,overflowY:"auto"}}>
 <style>{`@keyframes mI{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}`}</style>
@@ -435,13 +436,13 @@ const counts=t=>({up:t.take_votes.filter(v=>v.vote==="agree").length,dn:t.take_v
 const heat=({up,dn})=>up/(up+dn+1);
 const post=async()=>{
 if(busy)return;const text=nt.trim();
-if(!isSafe(text)||!isSafe(nm)){setErr("Please keep it respectful.");return;}
+if(hasProfanity(text,nm)){setErr(FAMILY_MSG);return;}
 if(text.length<20){setErr("At least 20 characters.");return;}
 if(text.length>280){setErr("280 characters max.");return;}
 setBusy(true);
 const{data,error}=await supabase.from("takes").insert({text,media_title:nm.trim()||null}).select(TAKE_COLS).single();
 setBusy(false);
-if(error){setErr(error.message);return;}
+if(error){setErr(isProfanityError(error)?FAMILY_MSG:error.message);return;}
 setTakes(t=>[data,...t]);setNt("");setNm("");setErr("");setOk(true);setTimeout(()=>setOk(false),3000);
 };
 const vote=async(take,v)=>{
@@ -833,7 +834,7 @@ const logout=()=>supabase.auth.signOut();
 const onLog=async item=>{
 const row={user_id:prof.id,media_id:String(item.id).slice(0,200),title:(item.title||"Untitled").slice(0,300),type:item.type,year:item.year?String(item.year).slice(0,10):null,cover:item.cover&&item.cover.length<=1000?item.cover:null,credit:item.credit?item.credit.slice(0,300):null,rating:item.userRating,comment:item.comment||null,status:item.status||null};
 const{data,error}=await supabase.from("ratings").upsert(row,{onConflict:"user_id,media_id"}).select().single();
-if(error)throw new Error(error.message);
+if(error)throw new Error(isProfanityError(error)?FAMILY_MSG:error.message);
 setLogged(prev=>({...prev,[data.media_id]:{...ratingFromRow(data),overview:item.overview||"",tags:item.tags||[]}}));
 };
 const init=prof?(prof.displayName||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase():"";
