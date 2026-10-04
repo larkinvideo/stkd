@@ -9,19 +9,22 @@ function apiDevServer() {
     name: 'api-dev-server',
     configureServer(server) {
       const env = loadEnv(server.config.mode, process.cwd(), '')
-      for (const k of ['ANTHROPIC_API_KEY', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']) {
+      for (const k of ['ANTHROPIC_API_KEY', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'TMDB_API_KEY', 'RAWG_API_KEY']) {
         if (env[k] && !process.env[k]) process.env[k] = env[k]
       }
-      server.middlewares.use('/api/chat', async (req, res) => {
-        try {
-          const { default: handler } = await server.ssrLoadModule('/api/chat.js')
-          await handler(req, res)
-        } catch (e) {
-          server.config.logger.error(e.stack || String(e))
-          if (!res.headersSent) res.statusCode = 500
-          res.end(JSON.stringify({ error: 'Local API error' }))
-        }
-      })
+      for (const name of ['chat', 'media']) {
+        server.middlewares.use(`/api/${name}`, async (req, res) => {
+          try {
+            req.url = req.originalUrl || req.url
+            const { default: handler } = await server.ssrLoadModule(`/api/${name}.js`)
+            await handler(req, res)
+          } catch (e) {
+            server.config.logger.error(e.stack || String(e))
+            if (!res.headersSent) res.statusCode = 500
+            res.end(JSON.stringify({ error: 'Local API error' }))
+          }
+        })
+      }
     },
   }
 }

@@ -28,20 +28,20 @@ if(s>=1.5)return["Terrible","#E53E3E"];
 return["Worthless","#991B1B"];
 }
 
+function useNarrow(){const q="(max-width: 640px)";const[n,setN]=useState(()=>typeof window!=="undefined"&&window.matchMedia(q).matches);useEffect(()=>{const m=window.matchMedia(q);const f=()=>setN(m.matches);m.addEventListener("change",f);return()=>m.removeEventListener("change",f);},[]);return n;}
 function useDb(v,ms){const[d,setD]=useState(v);useEffect(()=>{const t=setTimeout(()=>setD(v),ms);return()=>clearTimeout(t);},[v,ms]);return d;}
 
 
 async function doSearch(q,type){
-const TK="38de5f986a8f2d5419b9b41d47deeb75",RK="2e43cb91529d4758980e0041518dbced";
 const all=type==="all",res=[];
 try{
-if(all||type==="film"){const d=await(await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TK}&query=${encodeURIComponent(q)}`)).json();(d.results||[]).slice(0,4).forEach(m=>res.push({id:"f"+m.id,title:m.title,type:"film",year:m.release_date?.slice(0,4)||"",credit:"",overview:m.overview||"",cover:m.poster_path?`https://image.tmdb.org/t/p/w500${m.poster_path}`:null,tags:[]}));}
+if(all||type==="film"){const d=await(await fetch(`/api/media?src=movie&query=${encodeURIComponent(q)}`)).json();(d.results||[]).slice(0,4).forEach(m=>res.push({id:"f"+m.id,title:m.title,type:"film",year:m.release_date?.slice(0,4)||"",credit:"",overview:m.overview||"",cover:m.poster_path?`https://image.tmdb.org/t/p/w500${m.poster_path}`:null,tags:[]}));}
 }catch{}
 try{
-if(all||type==="series"){const d=await(await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${TK}&query=${encodeURIComponent(q)}`)).json();(d.results||[]).slice(0,4).forEach(m=>res.push({id:"s"+m.id,title:m.name,type:"series",year:m.first_air_date?.slice(0,4)||"",credit:"",overview:m.overview||"",cover:m.poster_path?`https://image.tmdb.org/t/p/w500${m.poster_path}`:null,tags:[]}));}
+if(all||type==="series"){const d=await(await fetch(`/api/media?src=tv&query=${encodeURIComponent(q)}`)).json();(d.results||[]).slice(0,4).forEach(m=>res.push({id:"s"+m.id,title:m.name,type:"series",year:m.first_air_date?.slice(0,4)||"",credit:"",overview:m.overview||"",cover:m.poster_path?`https://image.tmdb.org/t/p/w500${m.poster_path}`:null,tags:[]}));}
 }catch{}
 try{
-if(all||type==="game"){const d=await(await fetch(`https://api.rawg.io/api/games?key=${RK}&search=${encodeURIComponent(q)}&page_size=4`)).json();(d.results||[]).slice(0,4).forEach(g=>res.push({id:"g"+g.id,title:g.name,type:"game",year:g.released?.slice(0,4)||"",credit:"",overview:"",cover:g.background_image||null,tags:(g.genres||[]).slice(0,2).map(x=>x.name)}));}
+if(all||type==="game"){const d=await(await fetch(`/api/media?src=game&query=${encodeURIComponent(q)}`)).json();(d.results||[]).slice(0,4).forEach(g=>res.push({id:"g"+g.id,title:g.name,type:"game",year:g.released?.slice(0,4)||"",credit:"",overview:"",cover:g.background_image||null,tags:(g.genres||[]).slice(0,2).map(x=>x.name)}));}
 }catch{}
 try{
 if(all||type==="book"){const d=await(await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&fields=key,title,author_name,first_publish_year,cover_i&limit=4`)).json();(d.docs||[]).slice(0,4).forEach(b=>res.push({id:"b"+b.key,title:b.title,type:"book",year:b.first_publish_year?String(b.first_publish_year):"",credit:(b.author_name||[]).join(", "),overview:"",cover:b.cover_i?`https://covers.openlibrary.org/b/id/${b.cover_i}-L.jpg`:null,tags:[]}));}
@@ -197,6 +197,7 @@ return(
 {err&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:ACC,marginTop:8}}>{err}</div>}
 {info&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:"#4ADE80",marginTop:8}}>{info}</div>}
 <button onClick={go} disabled={busy} style={{width:"100%",padding:"12px",borderRadius:8,border:"none",background:PRI,color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:15,cursor:busy?"wait":"pointer",opacity:busy?0.7:1,marginTop:14}}>{busy?"…":mode==="signup"?"Create Account":"Log In"}</button>
+{mode==="signup"&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT,marginTop:10,textAlign:"center",lineHeight:1.5}}>By signing up you agree to our <a href="/terms.html" target="_blank" rel="noreferrer" style={{color:SUB}}>Terms</a> and <a href="/privacy.html" target="_blank" rel="noreferrer" style={{color:SUB}}>Privacy Policy</a>. You must be 16 or older.</div>}
 </div>
 </div>
 </div>
@@ -227,6 +228,15 @@ const[ae,setAe]=useState(initial?.avatarEmoji||"");
 const[err,setErr]=useState("");
 const[busy,setBusy]=useState(false);
 const initials=(dn||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+const deleteAccount=async()=>{
+if(busy)return;
+const typed=window.prompt("This permanently deletes your profile, ratings, hot takes and friends. Type DELETE to confirm.");
+if(typed!=="DELETE")return;
+setBusy(true);setErr("");
+const{error}=await supabase.rpc("delete_my_account");
+if(error){setBusy(false);setErr(`Couldn't delete your account: ${error.message}`);return;}
+await supabase.auth.signOut();
+};
 const finish=async()=>{
 if(busy)return;
 if(!HANDLE_RE.test(hd)){setErr("Username must be 3–20 letters, numbers or underscores.");return;}
@@ -272,6 +282,9 @@ return(
 <button onClick={finish} disabled={busy} style={{flex:1,padding:"11px",borderRadius:8,border:"none",background:PRI,color:"#fff",fontFamily:"'Barlow',sans-serif",fontWeight:700,fontSize:14,cursor:busy?"wait":"pointer",opacity:busy?0.7:1}}>{busy?"Saving…":initial?"Save":"Finish →"}</button>
 {onCancel&&<button onClick={onCancel} style={{padding:"11px 14px",borderRadius:8,border:`1px solid ${BOR}`,background:"transparent",color:MUT,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancel</button>}
 </div>
+{initial&&<div style={{marginTop:22,paddingTop:14,borderTop:`1px solid ${BOR}`,textAlign:"center"}}>
+<button onClick={deleteAccount} disabled={busy} style={{background:"transparent",border:"none",color:MUT,fontFamily:"'Barlow',sans-serif",fontSize:11,textDecoration:"underline",cursor:"pointer"}}>Delete my account</button>
+</div>}
 </div>
 </div>
 </div>
@@ -453,6 +466,19 @@ const q=supabase.from("take_votes");
 const{error}=!next?await q.delete().eq("take_id",take.id).eq("user_id",me.id):mine?await q.update({vote:next}).eq("take_id",take.id).eq("user_id",me.id):await q.insert({take_id:take.id,vote:next});
 if(error)load();
 };
+const report=async take=>{
+if(!window.confirm("Report this take for breaking the rules? We'll review it."))return;
+const{error}=await supabase.from("reports").insert({take_id:take.id,reason:"offensive"});
+if(error&&error.code!=="23505"){setLoadErr(error.message);return;}
+setTakes(ts=>ts.filter(t=>t.id!==take.id));
+};
+const block=async take=>{
+const h=take.profiles?.handle||"this user";
+if(!window.confirm(`Block @${h}? You won't see their takes, and you can't be friends. You can unblock them in Friends → People.`))return;
+const{error}=await supabase.from("blocks").insert({blocked:take.user_id});
+if(error&&error.code!=="23505"){setLoadErr(error.message);return;}
+setTakes(ts=>ts.filter(t=>t.user_id!==take.user_id));
+};
 const del=async take=>{
 if(!window.confirm("Delete this take?"))return;
 const{error}=await supabase.from("takes").delete().eq("id",take.id);
@@ -491,6 +517,7 @@ return(
 <div style={{borderTop:`1px solid ${BOR}`,padding:"7px 13px",display:"flex",gap:7,alignItems:"center"}}>
 <button onClick={()=>vote(take,"agree")} title="Agree" style={{display:"flex",alignItems:"center",gap:3,background:c.mine==="agree"?"#4ADE8018":DIM,border:`1px solid ${c.mine==="agree"?"#4ADE8060":BOR}`,borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,fontWeight:700,color:"#4ADE80"}}><svg width={9} height={9} viewBox="0 0 24 24" fill="#4ADE80"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/></svg>{c.up}</button>
 <button onClick={()=>vote(take,"disagree")} title="Disagree" style={{display:"flex",alignItems:"center",gap:3,background:c.mine==="disagree"?`${ACC}18`:DIM,border:`1px solid ${c.mine==="disagree"?ACC+"60":BOR}`,borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,fontWeight:700,color:ACC}}><svg width={9} height={9} viewBox="0 0 24 24" fill={ACC}><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3H10z"/></svg>{c.dn}</button>
+{take.user_id!==me.id&&<><button onClick={()=>report(take)} title="Report" style={{marginLeft:"auto",background:"transparent",border:`1px solid ${BOR}`,borderRadius:5,padding:"3px 9px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>Report</button><button onClick={()=>block(take)} title="Block user" style={{background:"transparent",border:`1px solid ${BOR}`,borderRadius:5,padding:"3px 9px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>Block</button></>}
 {take.user_id===me.id&&<button onClick={()=>del(take)} style={{marginLeft:"auto",background:"transparent",border:`1px solid ${BOR}`,borderRadius:5,padding:"3px 9px",cursor:"pointer",fontFamily:"'Barlow',sans-serif",fontSize:11,color:MUT}}>Delete</button>}
 </div>
 </div>
@@ -593,7 +620,7 @@ return(
 );
 }
 
-function Agent({onClose}){
+function Agent({onClose,narrow}){
 const[msgs,setMsgs]=useState([{role:"assistant",text:"Hey! I'm the Stkd AI Agent. I can help you find any film, series, game, book, manga, album or podcast, or give recommendations. What are you looking for?"}]);
 const[input,setInput]=useState("");const[loading,setLoading]=useState(false);const bot=useRef(null);
 useEffect(()=>{bot.current?.scrollIntoView({behavior:"smooth"});},[msgs]);
@@ -607,7 +634,7 @@ setMsgs(m=>[...m,{role:"assistant",text:d.content?.map(b=>b.text||"").join("")||
 setLoading(false);
 };
 return(
-<div style={{position:"fixed",bottom:84,right:22,width:340,background:SURF,border:"1px solid #2E3058",borderRadius:16,boxShadow:"0 24px 60px rgba(108,99,255,0.22)",zIndex:500,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+<div style={{position:"fixed",bottom:narrow?"calc(134px + env(safe-area-inset-bottom))":84,right:"min(22px, 3vw)",width:"min(340px, 94vw)",maxHeight:"70vh",background:SURF,border:"1px solid #2E3058",borderRadius:16,boxShadow:"0 24px 60px rgba(108,99,255,0.22)",zIndex:500,overflow:"hidden",display:"flex",flexDirection:"column"}}>
 <div style={{padding:"11px 13px 9px",borderBottom:`1px solid ${BOR}`,background:`linear-gradient(135deg,${PRI}18,${ACC}10)`,display:"flex",alignItems:"center",gap:10}}>
 <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${PRI},${ACC})`,display:"flex",alignItems:"center",justifyContent:"center"}}><svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round"><circle cx={12} cy={12} r={3}/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg></div>
 <div style={{flex:1}}><div style={{fontFamily:"'Barlow',sans-serif",fontWeight:800,fontSize:13,color:TXT}}>AI Agent</div><div style={{fontFamily:"'Barlow',sans-serif",fontSize:10,color:MUT}}>Find & discover any media</div></div>
@@ -648,27 +675,28 @@ const PersonRow=({p,mutual,children})=>(
 
 // Friendships involving the current user, plus recent ratings from accepted friends.
 async function fetchSocial(meId){
+const{data:bl}=await supabase.from("blocks").select(`blocked,profiles!blocks_blocked_fkey(${PROF_COLS})`);
 const{data:fs,error:e1}=await supabase.from("friendships").select(`id,status,created_at,requester,addressee,req:profiles!friendships_requester_fkey(${PROF_COLS}),adr:profiles!friendships_addressee_fkey(${PROF_COLS})`).order("created_at",{ascending:false});
 if(e1)return{error:e1};
 const ids=fs.filter(f=>f.status==="accepted").map(f=>f.requester===meId?f.addressee:f.requester);
-if(!ids.length)return{fs,rs:[]};
+if(!ids.length)return{fs,rs:[],bl:bl||[]};
 const{data:rs,error:e2}=await supabase.from("ratings").select(`id,media_id,title,type,year,cover,credit,rating,comment,status,updated_at,user_id,profiles(${PROF_COLS})`).in("user_id",ids).order("updated_at",{ascending:false}).limit(50);
 if(e2)return{error:e2};
-return{fs,rs};
+return{fs,rs,bl:bl||[]};
 }
 function Friends({me,invite,onInviteUsed}){
 const[sub,setSub]=useState(invite?"people":"feed");
-const[rels,setRels]=useState([]);const[feed,setFeed]=useState([]);
+const[rels,setRels]=useState([]);const[blocked,setBlocked]=useState([]);const[feed,setFeed]=useState([]);
 const[loading,setLoading]=useState(true);const[err,setErr]=useState("");
 const[q,setQ]=useState(invite||"");const[results,setResults]=useState(null);const[copied,setCopied]=useState(false);const[msg,setMsg]=useState("");const[busy,setBusy]=useState(false);
-const applySocial=useCallback(({fs,rs,error})=>{if(error)setErr(error.message);else{setRels(fs);setFeed(rs);setErr("");if(!fs.some(f=>f.status==="accepted"))setSub("people");}setLoading(false);},[]);
+const applySocial=useCallback(({fs,rs,bl,error})=>{if(error)setErr(error.message);else{setRels(fs);setFeed(rs);setBlocked(bl);setErr("");if(!fs.some(f=>f.status==="accepted"))setSub("people");}setLoading(false);},[]);
 const load=()=>fetchSocial(me.id).then(applySocial);
 useEffect(()=>{let live=true;fetchSocial(me.id).then(r=>{if(live)applySocial(r);});return()=>{live=false;};},[me.id,applySocial]);
 const other=f=>f.requester===me.id?f.adr:f.req;
 const incoming=rels.filter(f=>f.status==="pending"&&f.addressee===me.id);
 const sent=rels.filter(f=>f.status==="pending"&&f.requester===me.id);
 const friends=rels.filter(f=>f.status==="accepted");
-const act=async(fn,okMsg)=>{if(busy)return;setBusy(true);setMsg("");const{error}=await fn();setBusy(false);if(error){setMsg(error.code==="23505"?"There's already a request between you two.":/STKD_TOO_MANY/.test(error.message)?"You've sent a lot of requests. Wait for some to be accepted first.":error.message);return;}if(okMsg)setMsg(okMsg);await load();};
+const act=async(fn,okMsg)=>{if(busy)return;setBusy(true);setMsg("");const{error}=await fn();setBusy(false);if(error){setMsg(error.code==="23505"?"There's already a request between you two.":/STKD_TOO_MANY/.test(error.message)?"You've sent a lot of requests. Wait for some to be accepted first.":/STKD_BLOCKED/.test(error.message)?"You can't add this person.":error.message);return;}if(okMsg)setMsg(okMsg);await load();};
 // Live search as you type: handle prefix or display-name match.
 const qh=cleanHandle(q.replace(/^@/,""));
 useEffect(()=>{
@@ -756,7 +784,7 @@ return(
 <button onClick={shareInvite} style={btn(true)}>{copied?"Copied!":"Share link"}</button>
 </div>
 <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by @handle or name" style={{width:"100%",background:SURF,border:`1px solid ${BOR}`,borderRadius:8,padding:"9px 12px",color:TXT,fontFamily:"'Barlow',sans-serif",fontSize:13,outline:"none"}}/>
-{msg&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:/^Request sent/.test(msg)?"#4ADE80":ACC,marginTop:7}}>{msg}</div>}
+{msg&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:/^(Request sent|Unblocked)/.test(msg)?"#4ADE80":ACC,marginTop:7}}>{msg}</div>}
 {qh.length>=2&&results&&!results.length&&<div style={{fontFamily:"'Barlow',sans-serif",fontSize:12,color:MUT,marginTop:9}}>No one found. Send them your invite link instead.</div>}
 {qh.length>=2&&results&&results.length>0&&<div style={{marginTop:9,display:"flex",flexDirection:"column",gap:6}}>{results.map(p=>{
 const f=relWith(p.id);
@@ -776,6 +804,9 @@ return(
 {friends.map(f=>{const p=other(f);return(
 <PersonRow key={f.id} p={p} mutual><button disabled={busy} onClick={()=>remove(f,`Remove @${p?.handle} as a friend?`)} style={btn(false)}>Remove</button></PersonRow>
 );})}
+{blocked.length>0&&<><SectionHead n={blocked.length}>Blocked</SectionHead>{blocked.map(b=>(
+<PersonRow key={b.blocked} p={b.profiles}><button disabled={busy} onClick={()=>act(()=>supabase.from("blocks").delete().eq("blocked",b.blocked),`Unblocked @${b.profiles?.handle}.`)} style={btn(false)}>Unblock</button></PersonRow>
+))}</>}
 {sent.length>0&&<><SectionHead n={sent.length}>Sent</SectionHead>{sent.map(f=>(
 <PersonRow key={f.id} p={other(f)}><button disabled={busy} onClick={()=>remove(f)} style={btn(false)}>Cancel</button></PersonRow>
 ))}</>}
@@ -797,6 +828,7 @@ const[agent,setAgent]=useState(false);
 const[invite,setInvite]=useState(()=>{try{const h=cleanHandle(new URLSearchParams(window.location.search).get("add")||"");if(h){localStorage.setItem("stkd_invite",h);window.history.replaceState(null,"",window.location.pathname);}return localStorage.getItem("stkd_invite")||"";}catch{return "";}});
 const clearInvite=useCallback(()=>{try{localStorage.removeItem("stkd_invite");}catch{/* ignore */}setInvite("");setTab("friends");},[]);
 const curTab=invite?"friends":tab;
+const narrow=useNarrow();
 const[reqCount,setReqCount]=useState(0);
 useEffect(()=>{
 if(!prof?.id)return;
@@ -847,31 +879,38 @@ return(
 <div style={{minHeight:"100vh",background:BG}}>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet"/>
 <style>{`*{box-sizing:border-box}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#2E3058;border-radius:2px}`}</style>
-<header style={{position:"sticky",top:0,zIndex:100,background:`${BG}F8`,backdropFilter:"blur(20px)",borderBottom:`1px solid ${BOR}`}}>
+<header style={{position:"sticky",top:0,zIndex:100,background:`${BG}F8`,backdropFilter:"blur(20px)",borderBottom:`1px solid ${BOR}`,paddingTop:"env(safe-area-inset-top)"}}>
 <div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px",height:52,display:"flex",alignItems:"center",gap:14}}>
 <Logo/>
-<div style={{display:"flex",gap:2}}>
+{!narrow&&<div style={{display:"flex",gap:2}}>
 {TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 11px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:curTab===t.id?700:500,fontSize:12,background:curTab===t.id?DIM:"transparent",color:curTab===t.id?TXT:MUT,border:curTab===t.id?`1px solid ${BOR}`:"1px solid transparent",cursor:"pointer",position:"relative"}}>{t.lb}{t.id==="friends"&&reqCount>0&&<span style={{marginLeft:5,background:ACC,color:"#fff",borderRadius:8,padding:"0 5px",fontSize:9,fontWeight:800}}>{reqCount}</span>}</button>)}
-</div>
+</div>}
 <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}}>
 <div onClick={()=>setTab("profile")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:14,border:`1px solid ${BOR}`,background:SURF}}>
 <div style={{width:20,height:20,borderRadius:"50%",background:prof?.avatarColor||PRI,display:"flex",alignItems:"center",justifyContent:"center",fontSize:prof?.avatarEmoji?10:7,fontWeight:800,color:"#fff"}}>{prof?.avatarEmoji||init}</div>
-<span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB}}>@{prof?.handle}</span>
+{!narrow&&<span style={{fontFamily:"'Barlow',sans-serif",fontSize:11,color:SUB}}>@{prof?.handle}</span>}
 </div>
 <button onClick={logout} style={{background:"transparent",border:`1px solid ${BOR}`,color:MUT,padding:"4px 9px",borderRadius:6,fontFamily:"'Barlow',sans-serif",fontWeight:600,fontSize:11,cursor:"pointer"}}>Log out</button>
 </div>
 </div>
 </header>
-<div style={{maxWidth:1200,margin:"0 auto",padding:"0 18px"}}>
+<div style={{maxWidth:1200,margin:"0 auto",padding:narrow?"0 12px calc(64px + env(safe-area-inset-bottom))":"0 18px"}}>
 {curTab==="browse"&&<Browse logged={logged} onLog={onLog} onOpen={setSel}/>}
 {curTab==="profile"&&prof&&<MyProfile profile={prof} logged={logged} onEdit={()=>setSt("setup")}/>}
 {curTab==="friends"&&prof&&<Friends me={prof} invite={invite} onInviteUsed={clearInvite}/>}
 {curTab==="takes"&&prof&&<Takes me={prof}/>}
+<footer style={{padding:"28px 0 24px",borderTop:`1px solid ${BOR}`,marginTop:20,fontFamily:"'Barlow',sans-serif",fontSize:10.5,color:MUT,lineHeight:1.7,textAlign:"center"}}>
+<div style={{display:"flex",gap:14,justifyContent:"center",marginBottom:6}}><a href="/privacy.html" style={{color:SUB}}>Privacy</a><a href="/terms.html" style={{color:SUB}}>Terms</a><a href="mailto:hello@stkdapp.com" style={{color:SUB}}>Contact</a></div>
+<div>This product uses the TMDB API but is not endorsed or certified by TMDB. Game data from <a href="https://rawg.io" target="_blank" rel="noreferrer" style={{color:SUB}}>RAWG</a>. Books from Open Library, manga from MyAnimeList via Jikan, music &amp; podcasts from Apple iTunes.</div>
+</footer>
 </div>
-<button onClick={()=>setAgent(v=>!v)} style={{position:"fixed",bottom:22,right:22,width:48,height:48,borderRadius:"50%",background:`linear-gradient(135deg,${PRI},${ACC})`,border:"none",cursor:"pointer",boxShadow:`0 4px 20px ${PRI}50`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:600}}>
+<button onClick={()=>setAgent(v=>!v)} style={{position:"fixed",bottom:narrow?"calc(76px + env(safe-area-inset-bottom))":22,right:narrow?14:22,width:48,height:48,borderRadius:"50%",background:`linear-gradient(135deg,${PRI},${ACC})`,border:"none",cursor:"pointer",boxShadow:`0 4px 20px ${PRI}50`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:600}}>
 {agent?<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>:<svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round"><circle cx={12} cy={12} r={3}/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>}
 </button>
-{agent&&<Agent onClose={()=>setAgent(false)}/>}
+{narrow&&<nav style={{position:"fixed",left:0,right:0,bottom:0,zIndex:500,background:`${BG}F5`,backdropFilter:"blur(20px)",borderTop:`1px solid ${BOR}`,display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
+{TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,height:56,background:"transparent",border:"none",borderTop:`2px solid ${curTab===t.id?PRI:"transparent"}`,color:curTab===t.id?TXT:MUT,fontFamily:"'Barlow',sans-serif",fontWeight:curTab===t.id?700:500,fontSize:12,cursor:"pointer",position:"relative"}}>{t.lb}{t.id==="friends"&&reqCount>0&&<span style={{marginLeft:4,background:ACC,color:"#fff",borderRadius:8,padding:"0 5px",fontSize:9,fontWeight:800}}>{reqCount}</span>}</button>)}
+</nav>}
+{agent&&<Agent narrow={narrow} onClose={()=>setAgent(false)}/>}
 {sel&&<Modal key={sel.id} item={sel} existing={logged[sel.id]} onClose={()=>setSel(null)} onLog={onLog}/>}
 </div>
 );
